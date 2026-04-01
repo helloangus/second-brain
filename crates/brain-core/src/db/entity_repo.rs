@@ -1,9 +1,12 @@
 //! Entity repository
 
-use rusqlite::{params, Connection, Row};
 use crate::error::Error;
-use crate::models::{Entity, EntityClassification, EntityEvolution, EntityIdentity, EntityLinks, EntityMultimedia, EntityMetrics, EntityStatus, EntityType};
+use crate::models::{
+    Entity, EntityClassification, EntityEvolution, EntityIdentity, EntityLinks, EntityMetrics,
+    EntityMultimedia, EntityStatus, EntityType,
+};
 use chrono::DateTime;
+use rusqlite::{params, Connection, Row};
 
 pub struct EntityRepository<'a> {
     conn: &'a Connection,
@@ -70,10 +73,8 @@ impl<'a> EntityRepository<'a> {
             "DELETE FROM event_entities WHERE entity_id = ?1",
             params![id],
         )?;
-        self.conn.execute(
-            "DELETE FROM entities WHERE id = ?1",
-            params![id],
-        )?;
+        self.conn
+            .execute("DELETE FROM entities WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -91,9 +92,9 @@ impl<'a> EntityRepository<'a> {
 
     /// List entities by type
     pub fn find_by_type(&self, entity_type: &EntityType) -> Result<Vec<Entity>, Error> {
-        let mut stmt = self.conn.prepare(
-            "SELECT * FROM entities WHERE type = ?1 ORDER BY label"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM entities WHERE type = ?1 ORDER BY label")?;
         let mut rows = stmt.query(params![entity_type.to_string()])?;
         let mut entities = Vec::new();
 
@@ -106,9 +107,9 @@ impl<'a> EntityRepository<'a> {
 
     /// Search entities by label
     pub fn search(&self, keyword: &str) -> Result<Vec<Entity>, Error> {
-        let mut stmt = self.conn.prepare(
-            "SELECT * FROM entities WHERE label LIKE ?1 ORDER BY label"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM entities WHERE label LIKE ?1 ORDER BY label")?;
         let pattern = format!("%{}%", keyword);
         let mut rows = stmt.query(params![pattern])?;
         let mut entities = Vec::new();
@@ -122,7 +123,9 @@ impl<'a> EntityRepository<'a> {
 
     /// Get all entities
     pub fn all(&self) -> Result<Vec<Entity>, Error> {
-        let mut stmt = self.conn.prepare("SELECT * FROM entities ORDER BY type, label")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM entities ORDER BY type, label")?;
         let mut rows = stmt.query([])?;
         let mut entities = Vec::new();
 
@@ -232,9 +235,11 @@ impl<'a> EntityRepository<'a> {
                 last_seen: last_seen_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                 activity_score: row.get(20)?,
             },
-            created_at: row.get::<_, Option<i64>>(21)?
+            created_at: row
+                .get::<_, Option<i64>>(21)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
-            updated_at: row.get::<_, Option<i64>>(22)?
+            updated_at: row
+                .get::<_, Option<i64>>(22)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
             schema_version: row.get(1)?,
         })

@@ -3,5 +3,5 @@
 mod parser;
 mod serializer;
 
-pub use parser::{EventParser, EntityParser};
-pub use serializer::{EventSerializer, EntitySerializer};
+pub use parser::{EntityParser, EventParser};
+pub use serializer::{EntitySerializer, EventSerializer};

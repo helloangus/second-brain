@@ -2,9 +2,9 @@
 //!
 //! Processes raw data through AI models and creates events.
 
-mod queue;
-mod processor;
 mod builder;
+mod processor;
+mod queue;
 
 use brain_core::BrainConfig;
 use clap::{Parser, Subcommand};
@@ -59,7 +59,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Process { limit } => {
             processor::process_queue(&config, limit).await?;
         }
-        Commands::Add { task, input, source } => {
+        Commands::Add {
+            task,
+            input,
+            source,
+        } => {
             queue::add_task(&config, &task, &input, source.as_deref()).await?;
         }
         Commands::Status => {

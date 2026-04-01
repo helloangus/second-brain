@@ -100,19 +100,28 @@ impl AdapterConfig {
 pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
     match config.adapter_type.as_str() {
         "ollama" => {
-            let endpoint = config.endpoint.clone()
+            let endpoint = config
+                .endpoint
+                .clone()
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
-            Ok(Box::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
-                as Box<dyn ModelAdapter>)
+            Ok(
+                Box::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
+                    as Box<dyn ModelAdapter>,
+            )
         }
         "openai" => {
-            let api_key = config.api_key.clone()
+            let api_key = config
+                .api_key
+                .clone()
                 .ok_or_else(|| crate::Error::Config("OpenAI API key required".to_string()))?;
-            Ok(Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
-                as Box<dyn ModelAdapter>)
+            Ok(
+                Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
+                    as Box<dyn ModelAdapter>,
+            )
         }
         _ => Err(crate::Error::Config(format!(
-            "Unknown adapter type: {}", config.adapter_type
+            "Unknown adapter type: {}",
+            config.adapter_type
         ))),
     }
 }

@@ -1,10 +1,10 @@
 //! Add command
 
-use brain_core::{
-    BrainConfig, Database, Event, EventAi, EventEntities, EventRelations,
-    EventSource, EventTime, EventType, GraphHints, DerivedRefs, RawRefs,
-};
 use brain_core::markdown::EventSerializer;
+use brain_core::{
+    BrainConfig, Database, DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource,
+    EventTime, EventType, GraphHints, RawRefs,
+};
 use chrono::Utc;
 use std::fs;
 
@@ -71,7 +71,10 @@ pub fn execute(
     // Determine file path
     let year = now.format("%Y");
     let month = now.format("%m");
-    let events_dir = config.events_path.join(year.to_string()).join(month.to_string());
+    let events_dir = config
+        .events_path
+        .join(year.to_string())
+        .join(month.to_string());
     fs::create_dir_all(&events_dir)?;
 
     let file_path = events_dir.join(format!("{}.md", id));

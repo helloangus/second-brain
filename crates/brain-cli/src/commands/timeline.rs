@@ -13,8 +13,7 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
     let year: i32 = parts[0].parse()?;
     let month_num: u32 = parts[1].parse()?;
 
-    let start = NaiveDate::from_ymd_opt(year, month_num, 1)
-        .ok_or("Invalid date")?;
+    let start = NaiveDate::from_ymd_opt(year, month_num, 1).ok_or("Invalid date")?;
     let end = if month_num == 12 {
         NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap()
     } else {
@@ -39,7 +38,8 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
     }
 
     // Group by day
-    let mut by_day: std::collections::BTreeMap<NaiveDate, Vec<_>> = std::collections::BTreeMap::new();
+    let mut by_day: std::collections::BTreeMap<NaiveDate, Vec<_>> =
+        std::collections::BTreeMap::new();
 
     for event in &events {
         let date = event.time.start.date_naive();

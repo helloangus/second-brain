@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Entity type enum (extended set)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EntityType {
     Person,
@@ -12,6 +12,7 @@ pub enum EntityType {
     Project,
     Artifact,
     Concept,
+    #[default]
     Topic,
     Activity,
     Goal,
@@ -21,12 +22,6 @@ pub enum EntityType {
     Resource,
     MemoryCluster,
     State,
-}
-
-impl Default for EntityType {
-    fn default() -> Self {
-        Self::Topic
-    }
 }
 
 impl std::fmt::Display for EntityType {

@@ -1,9 +1,9 @@
 //! Database connection management
 
+use crate::Error;
 use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Mutex;
-use crate::Error;
 
 use super::run_migrations;
 

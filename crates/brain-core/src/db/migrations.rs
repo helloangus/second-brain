@@ -1,7 +1,7 @@
 //! Database schema migrations
 
-use rusqlite::Connection;
 use crate::Error;
+use rusqlite::Connection;
 
 const CREATE_TABLES: &str = r#"
 -- Events table

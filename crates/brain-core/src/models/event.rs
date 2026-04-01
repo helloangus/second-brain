@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Event type enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
     Meeting,
@@ -16,13 +16,8 @@ pub enum EventType {
     Exercise,
     Meal,
     Work,
+    #[default]
     Other,
-}
-
-impl Default for EventType {
-    fn default() -> Self {
-        Self::Other
-    }
 }
 
 impl std::fmt::Display for EventType {
@@ -194,10 +189,12 @@ impl Event {
     /// Generate a new event ID
     pub fn generate_id() -> String {
         let now = chrono::Utc::now();
-        let rand_hex: String = (0..3).map(|_| {
-            let idx = rand_u8() % 16;
-            "0123456789abcdef".chars().nth(idx as usize).unwrap()
-        }).collect();
+        let rand_hex: String = (0..3)
+            .map(|_| {
+                let idx = rand_u8() % 16;
+                "0123456789abcdef".chars().nth(idx as usize).unwrap()
+            })
+            .collect();
         format!("evt-{}-{}", now.format("%Y%m%d-%H%M%S"), rand_hex)
     }
 }

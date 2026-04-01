@@ -112,16 +112,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_default();
             commands::add::execute(&config, &type_, &summary, &tags)?;
         }
-        Commands::Entity { command } => {
-            match command {
-                EntityCommands::List { type_ } => {
-                    commands::entity::list(&config, type_.as_deref())?;
-                }
-                EntityCommands::Show { id } => {
-                    commands::entity::show(&config, &id)?;
-                }
+        Commands::Entity { command } => match command {
+            EntityCommands::List { type_ } => {
+                commands::entity::list(&config, type_.as_deref())?;
             }
-        }
+            EntityCommands::Show { id } => {
+                commands::entity::show(&config, &id)?;
+            }
+        },
         Commands::Stats => {
             commands::stats::execute(&config)?;
         }

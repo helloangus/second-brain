@@ -1,11 +1,11 @@
 //! Event processor for indexing markdown files
 
-use brain_core::{Database, EventRepository, EntityRepository};
-use brain_core::markdown::{EventParser, EntityParser};
+use brain_core::markdown::{EntityParser, EventParser};
+use brain_core::{Database, EntityRepository, EventRepository};
 use rusqlite::Connection;
 use std::fs;
 use std::path::Path;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Event processor for handling file changes
 pub struct EventProcessor<'a> {
@@ -80,15 +80,11 @@ impl<'a> EventProcessor<'a> {
     }
 
     fn is_event_file(&self, path: &Path) -> bool {
-        path.components().any(|c| {
-            c.as_os_str() == "events"
-        })
+        path.components().any(|c| c.as_os_str() == "events")
     }
 
     fn is_entity_file(&self, path: &Path) -> bool {
-        path.components().any(|c| {
-            c.as_os_str() == "entities"
-        })
+        path.components().any(|c| c.as_os_str() == "entities")
     }
 
     fn extract_id(&self, path: &Path) -> Option<String> {
@@ -115,19 +111,17 @@ pub fn index_existing_files(
             let path = entry.path();
             if path.extension().map(|e| e == "md").unwrap_or(false) {
                 match fs::read_to_string(path) {
-                    Ok(content) => {
-                        match EventParser::parse(&content) {
-                            Ok(event) => {
-                                let repo = EventRepository::new(&conn);
-                                if let Err(e) = repo.upsert(&event) {
-                                    error!("Failed to index event {}: {}", event.id, e);
-                                }
-                            }
-                            Err(e) => {
-                                warn!("Failed to parse {}: {}", path.display(), e);
+                    Ok(content) => match EventParser::parse(&content) {
+                        Ok(event) => {
+                            let repo = EventRepository::new(&conn);
+                            if let Err(e) = repo.upsert(&event) {
+                                error!("Failed to index event {}: {}", event.id, e);
                             }
                         }
-                    }
+                        Err(e) => {
+                            warn!("Failed to parse {}: {}", path.display(), e);
+                        }
+                    },
                     Err(e) => {
                         error!("Failed to read {}: {}", path.display(), e);
                     }
@@ -145,19 +139,17 @@ pub fn index_existing_files(
             let path = entry.path();
             if path.extension().map(|e| e == "md").unwrap_or(false) {
                 match fs::read_to_string(path) {
-                    Ok(content) => {
-                        match EntityParser::parse(&content) {
-                            Ok(entity) => {
-                                let repo = EntityRepository::new(&conn);
-                                if let Err(e) = repo.upsert(&entity) {
-                                    error!("Failed to index entity {}: {}", entity.id, e);
-                                }
-                            }
-                            Err(e) => {
-                                warn!("Failed to parse {}: {}", path.display(), e);
+                    Ok(content) => match EntityParser::parse(&content) {
+                        Ok(entity) => {
+                            let repo = EntityRepository::new(&conn);
+                            if let Err(e) = repo.upsert(&entity) {
+                                error!("Failed to index entity {}: {}", entity.id, e);
                             }
                         }
-                    }
+                        Err(e) => {
+                            warn!("Failed to parse {}: {}", path.display(), e);
+                        }
+                    },
                     Err(e) => {
                         error!("Failed to read {}: {}", path.display(), e);
                     }

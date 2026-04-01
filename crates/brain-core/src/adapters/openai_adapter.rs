@@ -57,7 +57,8 @@ impl OpenAIAdapter {
 
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str, body: &impl Serialize) -> Result<T> {
         let url = format!("https://api.openai.com/v1/{}", path);
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(body)
@@ -73,16 +74,11 @@ impl ModelAdapter for OpenAIAdapter {
     }
 
     fn supported_data_types(&self) -> Vec<RawDataType> {
-        vec![
-            RawDataType::Text,
-            RawDataType::Image,
-            RawDataType::Document,
-        ]
+        vec![RawDataType::Text, RawDataType::Image, RawDataType::Document]
     }
 
     fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutput> {
-        let content = std::fs::read_to_string(&input.path)
-            .map_err(|e| Error::Io(e))?;
+        let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
 
         let prompt = format!(
             r#"Analyze this {} and provide:
@@ -115,18 +111,19 @@ Respond in JSON format:
 
         let response: OpenAIResponse = self.post("chat/completions", &request)?;
 
-        let content_str = response.choices.first()
+        let content_str = response
+            .choices
+            .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
 
-        let output: AnalysisOutput = serde_json::from_str(&content_str)
-            .unwrap_or(AnalysisOutput {
-                summary: Some(content_str),
-                tags: Vec::new(),
-                entities: Vec::new(),
-                confidence: None,
-                raw_response: serde_json::Value::Null,
-            });
+        let output: AnalysisOutput = serde_json::from_str(&content_str).unwrap_or(AnalysisOutput {
+            summary: Some(content_str),
+            tags: Vec::new(),
+            entities: Vec::new(),
+            confidence: None,
+            raw_response: serde_json::Value::Null,
+        });
 
         Ok(output)
     }
@@ -143,7 +140,9 @@ Respond in JSON format:
 
         let response: OpenAIResponse = self.post("chat/completions", &request)?;
 
-        Ok(response.choices.first()
+        Ok(response
+            .choices
+            .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default())
     }
@@ -172,7 +171,9 @@ Respond in JSON format:
 
         let response: EmbedResponse = self.post("embeddings", &request)?;
 
-        Ok(response.data.first()
+        Ok(response
+            .data
+            .first()
             .map(|d| d.embedding.clone())
             .unwrap_or_default())
     }

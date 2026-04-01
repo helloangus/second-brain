@@ -1,10 +1,10 @@
 //! Task models for AI pipeline
 
-use serde::{Deserialize, Serialize};
 use super::raw_data::RawDataType;
+use serde::{Deserialize, Serialize};
 
 /// Task type enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskType {
     ImageCaption,
@@ -13,16 +13,11 @@ pub enum TaskType {
     Asr,
     SpeakerDiarization,
     Embedding,
+    #[default]
     Reasoning,
     Routing,
     Summarize,
     Tagging,
-}
-
-impl Default for TaskType {
-    fn default() -> Self {
-        Self::Reasoning
-    }
 }
 
 impl std::fmt::Display for TaskType {
@@ -43,6 +38,7 @@ impl std::fmt::Display for TaskType {
 }
 
 impl TaskType {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "image_caption" | "image.analyze" => Some(TaskType::ImageCaption),
@@ -90,10 +86,7 @@ impl ModelRecommendation {
             ModelRecommendation {
                 task_type: TaskType::ImageCaption,
                 data_type: RawDataType::Image,
-                recommended_models: vec![
-                    "Qwen2-VL".to_string(),
-                    "LLaVA".to_string(),
-                ],
+                recommended_models: vec!["Qwen2-VL".to_string(), "LLaVA".to_string()],
             },
             ModelRecommendation {
                 task_type: TaskType::FaceDetection,
@@ -123,10 +116,7 @@ impl ModelRecommendation {
             ModelRecommendation {
                 task_type: TaskType::Reasoning,
                 data_type: RawDataType::Text,
-                recommended_models: vec![
-                    "Qwen2.5".to_string(),
-                    "Llama3".to_string(),
-                ],
+                recommended_models: vec!["Qwen2.5".to_string(), "Llama3".to_string()],
             },
         ]
     }
@@ -148,19 +138,14 @@ impl PipelineTask {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
+    #[default]
     Pending,
     Processing,
     Done,
     Failed,
-}
-
-impl Default for TaskStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 //! Stats command
 
-use brain_core::{BrainConfig, Database, EventRepository, EntityRepository};
+use brain_core::{BrainConfig, Database, EntityRepository, EventRepository};
 
 pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::open(&config.db_path)?;
@@ -20,7 +20,8 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("Events: {}", events.len());
 
     // Event type distribution
-    let mut type_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut type_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for event in &events {
         *type_counts.entry(event.type_.to_string()).or_insert(0) += 1;
     }
@@ -37,9 +38,12 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     println!("Entities: {}", entities.len());
 
     // Entity type distribution
-    let mut entity_type_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut entity_type_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for entity in &entities {
-        *entity_type_counts.entry(entity.type_.to_string()).or_insert(0) += 1;
+        *entity_type_counts
+            .entry(entity.type_.to_string())
+            .or_insert(0) += 1;
     }
 
     println!("  By type:");

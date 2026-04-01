@@ -2,7 +2,10 @@
 
 use brain_core::{BrainConfig, Database, EntityRepository, EntityType};
 
-pub fn list(config: &BrainConfig, type_filter: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn list(
+    config: &BrainConfig,
+    type_filter: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::open(&config.db_path)?;
     let conn = db.connection();
     let repo = EntityRepository::new(&conn);

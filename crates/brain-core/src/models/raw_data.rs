@@ -3,20 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 /// Raw data type enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RawDataType {
     Image,
     Audio,
     Video,
+    #[default]
     Text,
     Document,
-}
-
-impl Default for RawDataType {
-    fn default() -> Self {
-        Self::Text
-    }
 }
 
 impl std::fmt::Display for RawDataType {

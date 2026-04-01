@@ -1,13 +1,13 @@
 //! Data models for Second Brain
 
-mod event;
 mod entity;
-mod tag;
+mod event;
 mod raw_data;
+mod tag;
 mod task;
 
-pub use event::*;
 pub use entity::*;
-pub use tag::*;
+pub use event::*;
 pub use raw_data::*;
+pub use tag::*;
 pub use task::*;

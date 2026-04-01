@@ -77,7 +77,8 @@ impl BrainConfig {
 
     /// Get the schema path
     pub fn schema_path(&self) -> PathBuf {
-        self.events_path.parent()
+        self.events_path
+            .parent()
             .map(|p| p.join("config/schema.yaml"))
             .unwrap_or_else(|| PathBuf::from("config/schema.yaml"))
     }

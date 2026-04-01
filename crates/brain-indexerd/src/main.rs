@@ -101,7 +101,11 @@ async fn run_watcher(
     watcher.watch(&events_path, RecursiveMode::Recursive)?;
     watcher.watch(&entities_path, RecursiveMode::Recursive)?;
 
-    info!("Watching {} and {}", events_path.display(), entities_path.display());
+    info!(
+        "Watching {} and {}",
+        events_path.display(),
+        entities_path.display()
+    );
 
     for event in rx {
         handle_event(&event, &state).await;
@@ -111,7 +115,7 @@ async fn run_watcher(
 }
 
 async fn handle_event(event: &Event, state: &Arc<Mutex<IndexerState>>) {
-    let paths: Vec<PathBuf> = event.paths.iter().cloned().collect();
+    let paths: Vec<PathBuf> = event.paths.to_vec();
 
     for path in paths {
         // Only process .md files

@@ -1,9 +1,12 @@
 //! Event repository
 
-use rusqlite::{params, Connection, Row};
 use crate::error::Error;
-use crate::models::{Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, GraphHints, RawRefs, DerivedRefs};
+use crate::models::{
+    DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, GraphHints,
+    RawRefs,
+};
 use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, Row};
 
 pub struct EventRepository<'a> {
     conn: &'a Connection,
@@ -66,7 +69,8 @@ impl<'a> EventRepository<'a> {
     /// Update FTS index for an event
     fn update_fts(&self, event: &Event) -> Result<(), Error> {
         // Delete existing FTS entry
-        self.conn.execute("DELETE FROM events_fts WHERE id = ?1", params![event.id])?;
+        self.conn
+            .execute("DELETE FROM events_fts WHERE id = ?1", params![event.id])?;
 
         // Insert new FTS entry
         let content = format!(
@@ -145,15 +149,13 @@ impl<'a> EventRepository<'a> {
     /// Update tags for an event
     fn update_tags(&self, event: &Event) -> Result<(), Error> {
         // Delete existing tags
-        self.conn.execute(
-            "DELETE FROM tags WHERE event_id = ?1",
-            params![event.id],
-        )?;
+        self.conn
+            .execute("DELETE FROM tags WHERE event_id = ?1", params![event.id])?;
 
         // Insert new tags
-        let mut insert_stmt = self.conn.prepare(
-            "INSERT INTO tags (event_id, tag, confidence) VALUES (?1, ?2, 1.0)",
-        )?;
+        let mut insert_stmt = self
+            .conn
+            .prepare("INSERT INTO tags (event_id, tag, confidence) VALUES (?1, ?2, 1.0)")?;
 
         for tag in &event.tags {
             insert_stmt.execute(params![event.id, tag])?;
@@ -164,19 +166,26 @@ impl<'a> EventRepository<'a> {
 
     /// Delete an event by ID
     pub fn delete(&self, id: &str) -> Result<(), Error> {
-        self.conn.execute("DELETE FROM tags WHERE event_id = ?1", params![id])?;
-        self.conn.execute("DELETE FROM event_entities WHERE event_id = ?1", params![id])?;
-        self.conn.execute("DELETE FROM event_relations WHERE event_id = ?1", params![id])?;
-        self.conn.execute("DELETE FROM events_fts WHERE id = ?1", params![id])?;
-        self.conn.execute("DELETE FROM events WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM tags WHERE event_id = ?1", params![id])?;
+        self.conn.execute(
+            "DELETE FROM event_entities WHERE event_id = ?1",
+            params![id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM event_relations WHERE event_id = ?1",
+            params![id],
+        )?;
+        self.conn
+            .execute("DELETE FROM events_fts WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM events WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     /// Find event by ID
     pub fn find_by_id(&self, id: &str) -> Result<Option<Event>, Error> {
-        let mut stmt = self.conn.prepare(
-            "SELECT * FROM events WHERE id = ?1"
-        )?;
+        let mut stmt = self.conn.prepare("SELECT * FROM events WHERE id = ?1")?;
 
         let mut rows = stmt.query(params![id])?;
 
@@ -193,7 +202,7 @@ impl<'a> EventRepository<'a> {
             r#"SELECT e.* FROM events e
                JOIN events_fts fts ON e.id = fts.id
                WHERE events_fts MATCH ?1
-               ORDER BY rank"#
+               ORDER BY rank"#,
         )?;
 
         let mut rows = stmt.query(params![keyword])?;
@@ -213,7 +222,7 @@ impl<'a> EventRepository<'a> {
         end: DateTime<Utc>,
     ) -> Result<Vec<Event>, Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT * FROM events WHERE time_start >= ?1 AND time_start <= ?2 ORDER BY time_start"
+            "SELECT * FROM events WHERE time_start >= ?1 AND time_start <= ?2 ORDER BY time_start",
         )?;
 
         let mut rows = stmt.query(params![start.timestamp(), end.timestamp()])?;
@@ -228,7 +237,9 @@ impl<'a> EventRepository<'a> {
 
     /// Get all events
     pub fn all(&self) -> Result<Vec<Event>, Error> {
-        let mut stmt = self.conn.prepare("SELECT * FROM events ORDER BY time_start DESC")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT * FROM events ORDER BY time_start DESC")?;
         let mut rows = stmt.query([])?;
         let mut events = Vec::new();
 
@@ -269,14 +280,15 @@ impl<'a> EventRepository<'a> {
             type_: event_type,
             subtype: row.get(6)?,
             time: EventTime {
-                start: DateTime::from_timestamp(time_start_ts, 0)
-                    .unwrap_or_else(|| Utc::now()),
+                start: DateTime::from_timestamp(time_start_ts, 0).unwrap_or_else(Utc::now),
                 end: time_end_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                 timezone,
             },
-            created_at: row.get::<_, Option<i64>>(18)?
+            created_at: row
+                .get::<_, Option<i64>>(18)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
-            ingested_at: row.get::<_, Option<i64>>(19)?
+            ingested_at: row
+                .get::<_, Option<i64>>(19)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
             source: EventSource {
                 device: row.get(7)?,

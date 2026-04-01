@@ -1,6 +1,6 @@
 //! Queue management
 
-use brain_core::{BrainConfig, PipelineTask, TaskStatus, TaskType, PipelineInput};
+use brain_core::{BrainConfig, PipelineInput, PipelineTask, TaskStatus, TaskType};
 use std::fs;
 use std::path::Path;
 use tracing::info;
@@ -13,8 +13,8 @@ pub async fn add_task(
     input_path: &str,
     source: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let task = TaskType::from_str(task_type)
-        .ok_or_else(|| format!("Unknown task type: {}", task_type))?;
+    let task =
+        TaskType::from_str(task_type).ok_or_else(|| format!("Unknown task type: {}", task_type))?;
 
     let task_id = Uuid::new_v4().to_string()[..8].to_string();
 
@@ -66,7 +66,12 @@ fn count_files(dir: &Path) -> Result<usize, Box<dyn std::error::Error>> {
 
     let count = fs::read_dir(dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|ext| ext == "yaml").unwrap_or(false))
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|ext| ext == "yaml")
+                .unwrap_or(false)
+        })
         .count();
 
     Ok(count)

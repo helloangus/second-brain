@@ -1,11 +1,11 @@
 //! Task processor
 
-use brain_core::{BrainConfig, PipelineTask, PipelineOutput};
-use brain_core::adapters::{create_adapter, AdapterConfig, ModelAdapter, RawDataInput};
 use crate::builder::EventBuilder;
+use brain_core::adapters::{create_adapter, AdapterConfig, ModelAdapter, RawDataInput};
+use brain_core::{BrainConfig, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 
 /// Process all pending tasks in the queue
 pub async fn process_queue(
@@ -23,7 +23,12 @@ pub async fn process_queue(
     // Get all pending tasks
     let mut tasks: Vec<PathBuf> = fs::read_dir(&pending_dir)?
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|ext| ext == "yaml").unwrap_or(false))
+        .filter(|e| {
+            e.path()
+                .extension()
+                .map(|ext| ext == "yaml")
+                .unwrap_or(false)
+        })
         .map(|e| e.path())
         .collect();
 
@@ -43,7 +48,9 @@ pub async fn process_queue(
     println!("Processing {} task(s)...", tasks.len());
 
     // Get adapter configuration
-    let adapter_config = config.adapters.first()
+    let adapter_config = config
+        .adapters
+        .first()
         .cloned()
         .unwrap_or_else(|| AdapterConfig::ollama("http://localhost:11434", "llama3"));
 
@@ -74,7 +81,7 @@ pub async fn process_queue(
         fs::rename(&task_path, &processing_path)?;
 
         // Process the task
-        match process_task(&task, adapter.as_ref(), &config).await {
+        match process_task(&task, adapter.as_ref(), config).await {
             Ok(_) => {
                 // Move to done
                 let done_path = done_dir.join(task_path.file_name().unwrap());
@@ -119,7 +126,11 @@ async fn process_task(
             confidence: analysis.confidence,
         }
     } else {
-        warn!("Adapter {} does not support {:?}", adapter.name(), task.data_type());
+        warn!(
+            "Adapter {} does not support {:?}",
+            adapter.name(),
+            task.data_type()
+        );
         PipelineOutput::default()
     };
 
@@ -134,7 +145,8 @@ async fn process_task(
     // Save event to file
     let year = event.time.start.format("%Y").to_string();
     let month = event.time.start.format("%m").to_string();
-    let event_path = config.events_path
+    let event_path = config
+        .events_path
         .join(&year)
         .join(&month)
         .join(format!("{}.md", event.id));

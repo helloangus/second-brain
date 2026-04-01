@@ -4,8 +4,8 @@
 //! validates and transforms AI JSON output into proper events.
 
 use brain_core::{
-    Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, EventType,
-    GraphHints, DerivedRefs, RawRefs, PipelineOutput, TaskType,
+    DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, EventType,
+    GraphHints, PipelineOutput, RawRefs, TaskType,
 };
 use chrono::Utc;
 use std::path::Path;
@@ -40,7 +40,9 @@ impl EventBuilder {
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
 
-        let summary = output.summary.clone()
+        let summary = output
+            .summary
+            .clone()
             .unwrap_or_else(|| format!("Processed {} from {}", task_type, filename));
 
         let event = Event {

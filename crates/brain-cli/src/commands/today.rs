@@ -1,7 +1,7 @@
 //! Today command
 
 use brain_core::{BrainConfig, Database, EventRepository};
-use chrono:: Utc;
+use chrono::Utc;
 
 pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();

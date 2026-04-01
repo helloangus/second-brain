@@ -14,8 +14,8 @@ impl EventParser {
         // Extract frontmatter between --- markers
         let frontmatter = extract_frontmatter(content)?;
 
-        let event: ParsedEventFrontmatter = serde_yaml::from_str(&frontmatter)
-            .map_err(|e| Error::MarkdownParse(e.to_string()))?;
+        let event: ParsedEventFrontmatter =
+            serde_yaml::from_str(&frontmatter).map_err(|e| Error::MarkdownParse(e.to_string()))?;
 
         Ok(event.into_event())
     }
@@ -30,8 +30,8 @@ impl EntityParser {
         // Extract frontmatter between --- markers
         let frontmatter = extract_frontmatter(content)?;
 
-        let entity: ParsedEntityFrontmatter = serde_yaml::from_str(&frontmatter)
-            .map_err(|e| Error::MarkdownParse(e.to_string()))?;
+        let entity: ParsedEntityFrontmatter =
+            serde_yaml::from_str(&frontmatter).map_err(|e| Error::MarkdownParse(e.to_string()))?;
 
         Ok(entity.into_entity())
     }
@@ -250,16 +250,23 @@ impl ParsedEventFrontmatter {
                 timezone: self.time.timezone,
             },
             created_at: self.created_at.as_ref().and_then(|s| {
-                DateTime::parse_from_rfc3339(s).map(|dt| dt.with_timezone(&Utc)).ok()
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .ok()
             }),
             ingested_at: self.ingested_at.as_ref().and_then(|s| {
-                DateTime::parse_from_rfc3339(s).map(|dt| dt.with_timezone(&Utc)).ok()
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .ok()
             }),
-            source: self.source.map(|s| EventSource {
-                device: s.device,
-                channel: s.channel,
-                capture_agent: s.capture_agent,
-            }).unwrap_or_default(),
+            source: self
+                .source
+                .map(|s| EventSource {
+                    device: s.device,
+                    channel: s.channel,
+                    capture_agent: s.capture_agent,
+                })
+                .unwrap_or_default(),
             status: self.status,
             confidence: self.confidence,
             entities: EventEntities {
@@ -282,23 +289,35 @@ impl ParsedEventFrontmatter {
             raw_refs: RawRefs {
                 files: self.raw_refs.unwrap_or_default(),
             },
-            derived_refs: self.derived_refs.map(|d| DerivedRefs {
-                transcript: d.transcript,
-                embedding: d.embedding,
-            }).unwrap_or_default(),
-            ai: self.ai.map(|a| EventAi {
-                summary: a.summary,
-                topics: a.topics,
-                sentiment: a.sentiment,
-                extraction_version: a.extraction_version,
-            }).unwrap_or_default(),
-            relations: self.relations.map(|r| EventRelations {
-                inferred_from: r.inferred_from,
-            }).unwrap_or_default(),
-            graph_hints: self.graph_hints.map(|g| GraphHints {
-                importance: g.importance,
-                recurrence: g.recurrence.unwrap_or(false),
-            }).unwrap_or_default(),
+            derived_refs: self
+                .derived_refs
+                .map(|d| DerivedRefs {
+                    transcript: d.transcript,
+                    embedding: d.embedding,
+                })
+                .unwrap_or_default(),
+            ai: self
+                .ai
+                .map(|a| EventAi {
+                    summary: a.summary,
+                    topics: a.topics,
+                    sentiment: a.sentiment,
+                    extraction_version: a.extraction_version,
+                })
+                .unwrap_or_default(),
+            relations: self
+                .relations
+                .map(|r| EventRelations {
+                    inferred_from: r.inferred_from,
+                })
+                .unwrap_or_default(),
+            graph_hints: self
+                .graph_hints
+                .map(|g| GraphHints {
+                    importance: g.importance,
+                    recurrence: g.recurrence.unwrap_or(false),
+                })
+                .unwrap_or_default(),
             schema_version: self.schema_version,
         }
     }
@@ -439,40 +458,70 @@ impl ParsedEntityFrontmatter {
             aliases: self.aliases.clone(),
             status,
             confidence: self.confidence,
-            classification: self.classification.clone().map(|c| EntityClassification {
-                domain: c.domain,
-                parent: c.parent,
-            }).unwrap_or_default(),
-            identity: self.identity.clone().map(|i| EntityIdentity {
-                description: i.description,
-                summary: i.summary,
-            }).unwrap_or_default(),
-            multimedia: self.multimedia.clone().map(|m| EntityMultimedia {
-                images: m.images,
-                voices: m.voices,
-                embeddings_text: m.embeddings.and_then(|e| e.text),
-            }).unwrap_or_default(),
-            links: self.links.clone().map(|l| EntityLinks {
-                wikipedia: l.wikipedia,
-                papers: l.papers,
-                custom: std::collections::HashMap::new(),
-            }).unwrap_or_default(),
-            evolution: self.evolution.clone().map(|e| EntityEvolution {
-                merged_from: e.merged_from,
-                split_to: e.split_to,
-            }).unwrap_or_default(),
-            metrics: self.metrics.clone().map(|m| EntityMetrics {
-                event_count: m.event_count.unwrap_or(0),
-                last_seen: m.last_seen.and_then(|s| {
-                    DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&Utc)).ok()
-                }),
-                activity_score: m.activity_score,
-            }).unwrap_or_default(),
+            classification: self
+                .classification
+                .clone()
+                .map(|c| EntityClassification {
+                    domain: c.domain,
+                    parent: c.parent,
+                })
+                .unwrap_or_default(),
+            identity: self
+                .identity
+                .clone()
+                .map(|i| EntityIdentity {
+                    description: i.description,
+                    summary: i.summary,
+                })
+                .unwrap_or_default(),
+            multimedia: self
+                .multimedia
+                .clone()
+                .map(|m| EntityMultimedia {
+                    images: m.images,
+                    voices: m.voices,
+                    embeddings_text: m.embeddings.and_then(|e| e.text),
+                })
+                .unwrap_or_default(),
+            links: self
+                .links
+                .clone()
+                .map(|l| EntityLinks {
+                    wikipedia: l.wikipedia,
+                    papers: l.papers,
+                    custom: std::collections::HashMap::new(),
+                })
+                .unwrap_or_default(),
+            evolution: self
+                .evolution
+                .clone()
+                .map(|e| EntityEvolution {
+                    merged_from: e.merged_from,
+                    split_to: e.split_to,
+                })
+                .unwrap_or_default(),
+            metrics: self
+                .metrics
+                .clone()
+                .map(|m| EntityMetrics {
+                    event_count: m.event_count.unwrap_or(0),
+                    last_seen: m.last_seen.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .ok()
+                    }),
+                    activity_score: m.activity_score,
+                })
+                .unwrap_or_default(),
             created_at: self.created_at.as_ref().and_then(|s| {
-                DateTime::parse_from_rfc3339(s).map(|dt| dt.with_timezone(&Utc)).ok()
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .ok()
             }),
             updated_at: self.updated_at.as_ref().and_then(|s| {
-                DateTime::parse_from_rfc3339(s).map(|dt| dt.with_timezone(&Utc)).ok()
+                DateTime::parse_from_rfc3339(s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .ok()
             }),
             schema_version: self.schema_version,
         }

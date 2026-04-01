@@ -93,9 +93,7 @@ impl EventSerializer {
         }
 
         // AI
-        if event.ai.summary.is_some()
-            || !event.ai.topics.is_empty()
-            || event.ai.sentiment.is_some()
+        if event.ai.summary.is_some() || !event.ai.topics.is_empty() || event.ai.sentiment.is_some()
         {
             yaml.push_str("ai:\n");
             if let Some(ref summary) = event.ai.summary {
@@ -251,11 +249,14 @@ impl EntitySerializer {
             }
         }
 
-        yaml.push_str(&format!("status: {}\n", match entity.status {
-            EntityStatus::Active => "active",
-            EntityStatus::Archived => "archived",
-            EntityStatus::Merged => "merged",
-        }));
+        yaml.push_str(&format!(
+            "status: {}\n",
+            match entity.status {
+                EntityStatus::Active => "active",
+                EntityStatus::Archived => "archived",
+                EntityStatus::Merged => "merged",
+            }
+        ));
         yaml.push_str(&format!("confidence: {}\n", entity.confidence));
 
         // Classification

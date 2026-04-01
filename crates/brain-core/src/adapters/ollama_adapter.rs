@@ -57,11 +57,7 @@ impl OllamaAdapter {
 
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str, body: &impl Serialize) -> Result<T> {
         let url = format!("{}/{}", self.endpoint, path);
-        let response = self.client
-            .post(&url)
-            .json(body)
-            .send()?
-            .json::<T>()?;
+        let response = self.client.post(&url).json(body).send()?.json::<T>()?;
         Ok(response)
     }
 }
@@ -72,17 +68,12 @@ impl ModelAdapter for OllamaAdapter {
     }
 
     fn supported_data_types(&self) -> Vec<RawDataType> {
-        vec![
-            RawDataType::Text,
-            RawDataType::Image,
-            RawDataType::Document,
-        ]
+        vec![RawDataType::Text, RawDataType::Image, RawDataType::Document]
     }
 
     fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutput> {
         // Read file content if it's text
-        let content = std::fs::read_to_string(&input.path)
-            .map_err(|e| Error::Io(e))?;
+        let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
 
         // Create a prompt for analysis
         let prompt = format!(
@@ -114,8 +105,8 @@ Respond in JSON format:
         let response: OllamaResponse = self.post("api/generate", &request)?;
 
         // Try to parse as JSON
-        let output: AnalysisOutput = serde_json::from_str(&response.response)
-            .unwrap_or_else(|_| AnalysisOutput {
+        let output: AnalysisOutput =
+            serde_json::from_str(&response.response).unwrap_or_else(|_| AnalysisOutput {
                 summary: Some(response.response.clone()),
                 tags: Vec::new(),
                 entities: Vec::new(),
@@ -127,10 +118,7 @@ Respond in JSON format:
     }
 
     fn summarize(&self, text: &str) -> Result<String> {
-        let prompt = format!(
-            "Summarize the following text in 2-3 sentences:\n\n{}",
-            text
-        );
+        let prompt = format!("Summarize the following text in 2-3 sentences:\n\n{}", text);
 
         let request = OllamaRequest {
             model: self.model.clone(),
@@ -153,7 +141,11 @@ Respond in JSON format:
     }
 
     fn health_check(&self) -> Result<bool> {
-        match self.client.get(format!("{}/api/tags", self.endpoint)).send() {
+        match self
+            .client
+            .get(format!("{}/api/tags", self.endpoint))
+            .send()
+        {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => Ok(false),
         }
