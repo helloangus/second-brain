@@ -150,8 +150,16 @@ pub enum TaskStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineInput {
+    /// Path to the input file (relative to raw_data_path, includes data_type prefix)
     pub path: String,
-    pub source: Option<String>,
+    /// Input channel (e.g., CLI, API, Web)
+    pub channel: Option<String>,
+    /// Device that created this data (e.g., PC, iPhone, Server)
+    pub device: Option<String>,
+    /// How the data was captured (e.g., manual_entry, pipeline)
+    pub capture_agent: Option<String>,
+    /// Data type (text, image, audio, video, document)
+    pub data_type: RawDataType,
     #[serde(default)]
     pub metadata: std::collections::HashMap<String, String>,
 }
@@ -159,8 +167,16 @@ pub struct PipelineInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PipelineOutput {
     pub summary: Option<String>,
+    /// Event type (e.g., note, task, research, photo)
+    #[serde(default)]
+    pub type_: Option<String>,
+    /// Event subtype (e.g., summarize, reasoning, image_caption)
+    #[serde(default)]
+    pub subtype: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub topics: Vec<String>,
     #[serde(default)]
     pub entities: Vec<String>,
     pub confidence: Option<f64>,

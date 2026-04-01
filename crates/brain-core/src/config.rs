@@ -19,9 +19,20 @@ pub struct BrainConfig {
     pub raw_data_path: PathBuf,
     /// Path to pipeline queue directory
     pub pipeline_queue_path: PathBuf,
+    /// Path to dictionaries directory
+    pub dicts_path: PathBuf,
+    /// Path to logs database (can be different from main db)
+    pub log_db_path: PathBuf,
+    /// Log rotation strategy: "weekly" or "monthly"
+    #[serde(default = "default_log_rotation")]
+    pub log_rotation: String,
     /// Adapter configurations
     #[serde(default)]
     pub adapters: Vec<crate::adapters::AdapterConfig>,
+}
+
+fn default_log_rotation() -> String {
+    "monthly".to_string()
 }
 
 impl Default for BrainConfig {
@@ -34,6 +45,9 @@ impl Default for BrainConfig {
             entities_path: root.join("entities"),
             raw_data_path: root.join("data/raw"),
             pipeline_queue_path: root.join("pipelines/queue"),
+            dicts_path: root.join("dicts"),
+            log_db_path: root.join("logs/brain"),
+            log_rotation: "monthly".to_string(),
             adapters: Vec::new(),
         }
     }
@@ -81,6 +95,62 @@ impl BrainConfig {
             .parent()
             .map(|p| p.join("config/schema.yaml"))
             .unwrap_or_else(|| PathBuf::from("config/schema.yaml"))
+    }
+
+    /// Get the log database path for the current time period
+    pub fn log_db_path_for_time(&self) -> PathBuf {
+        let now = chrono::Utc::now();
+        let (year, month, week) = {
+            let dt = now.format("%Y-%m-%d").to_string();
+            // Extract year and month from the date string
+            let parts: Vec<&str> = dt.split('-').collect();
+            (
+                parts[0].to_string(),
+                parts[1].to_string(),
+                ((parts[2].parse::<u32>().unwrap_or(1) - 1) / 7 + 1).to_string(),
+            )
+        };
+
+        let dir = if self.log_rotation == "weekly" {
+            self.log_db_path.join(&year).join(format!("week{}", week))
+        } else {
+            // monthly default
+            self.log_db_path.join(&year).join(&month)
+        };
+
+        fs::create_dir_all(&dir).ok();
+        dir.join("logs.db")
+    }
+
+    /// Get all log database paths (for querying historical logs)
+    pub fn all_log_db_paths(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        if let Ok(entries) = fs::read_dir(&self.log_db_path) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    if let Ok(sub_entries) = fs::read_dir(&path) {
+                        for sub_entry in sub_entries.filter_map(|e| e.ok()) {
+                            let sub_path = sub_entry.path();
+                            if sub_path.is_file() && sub_path.extension().map(|e| e == "db").unwrap_or(false) {
+                                paths.push(sub_path);
+                            } else if sub_path.is_dir() {
+                                if let Ok(db_files) = fs::read_dir(&sub_path) {
+                                    for db_file in db_files.filter_map(|e| e.ok()) {
+                                        let db_path = db_file.path();
+                                        if db_path.extension().map(|e| e == "db").unwrap_or(false) {
+                                            paths.push(db_path);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        paths.sort();
+        paths
     }
 }
 

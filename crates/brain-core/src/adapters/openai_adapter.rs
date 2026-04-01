@@ -3,11 +3,9 @@
 use crate::adapters::{AnalysisOutput, ModelAdapter, RawDataInput, RawDataType};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// OpenAI adapter for cloud LLM inference
 pub struct OpenAIAdapter {
-    client: reqwest::blocking::Client,
     api_key: String,
     model: String,
 }
@@ -43,13 +41,7 @@ struct MessageContent {
 impl OpenAIAdapter {
     /// Create a new OpenAI adapter
     pub fn new(api_key: &str, model: &str) -> Result<Self> {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| Error::Config(format!("Failed to create HTTP client: {}", e)))?;
-
         Ok(Self {
-            client,
             api_key: api_key.to_string(),
             model: model.to_string(),
         })
@@ -57,14 +49,21 @@ impl OpenAIAdapter {
 
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str, body: &impl Serialize) -> Result<T> {
         let url = format!("https://api.openai.com/v1/{}", path);
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(body)
-            .send()?
-            .json::<T>()?;
-        Ok(response)
+        let body_str = serde_json::to_string(body).map_err(|e| Error::Config(format!("JSON error: {}", e)))?;
+
+        let response = ureq::post(&url)
+            .set("Content-Type", "application/json")
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .send_string(&body_str)
+            .map_err(|e| Error::Http(format!("Request failed: {}", e)))?;
+
+        if response.status() >= 400 {
+            return Err(Error::Http(format!("HTTP error: {}", response.status())));
+        }
+
+        let text = response.into_string().map_err(|e| Error::Io(e))?;
+        let result = serde_json::from_str(&text).map_err(|e| Error::Config(format!("Parse error: {}", e)))?;
+        Ok(result)
     }
 }
 
@@ -80,24 +79,61 @@ impl ModelAdapter for OpenAIAdapter {
     fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutput> {
         let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
 
+        // Build dict context for the prompt
+        let dict_context_str = if let Some(ref ctx) = input.dict_context {
+            let types = if ctx.event_types.is_empty() {
+                "none".to_string()
+            } else {
+                ctx.event_types.join(", ")
+            };
+            let subtypes = if ctx.event_subtypes.is_empty() {
+                "none".to_string()
+            } else {
+                ctx.event_subtypes.join(", ")
+            };
+            let tags = if ctx.tags.is_empty() {
+                "none".to_string()
+            } else {
+                ctx.tags.join(", ")
+            };
+            let topics = if ctx.topics.is_empty() {
+                "none".to_string()
+            } else {
+                ctx.topics.join(", ")
+            };
+            format!(
+                "\n\nWhen choosing event type, subtype, tags, and topics, prefer from these existing values:\n- Event types (use one): {}\n- Event subtypes (use one): {}\n- Tags (use existing when relevant): {}\n- Topics (use existing when relevant): {}",
+                types, subtypes, tags, topics
+            )
+        } else {
+            String::new()
+        };
+
         let prompt = format!(
             r#"Analyze this {} and provide:
 1. A brief summary (2-3 sentences)
-2. Key tags (comma-separated)
-3. Any entities or topics mentioned
+2. Event type (prefer from existing: see below)
+3. Event subtype (prefer from existing: see below)
+4. Key tags (prefer from existing when relevant)
+5. Key topics (prefer from existing when relevant)
+6. Any entities mentioned
 
 Content:
-{}
+{}{}
 
 Respond in JSON format:
 {{
     "summary": "...",
-    "tags": ["tag1", "tag2"],
+    "type": "prefer from existing event types",
+    "subtype": "prefer from existing subtypes",
+    "tags": ["prefer existing tags"],
+    "topics": ["prefer existing topics"],
     "entities": ["entity1"],
     "confidence": 0.85
 }}"#,
             input.data_type,
-            content.chars().take(2000).collect::<String>()
+            content.chars().take(2000).collect::<String>(),
+            dict_context_str
         );
 
         let request = OpenAIRequest {
@@ -119,7 +155,10 @@ Respond in JSON format:
 
         let output: AnalysisOutput = serde_json::from_str(&content_str).unwrap_or(AnalysisOutput {
             summary: Some(content_str),
+            type_: None,
+            subtype: None,
             tags: Vec::new(),
+            topics: Vec::new(),
             entities: Vec::new(),
             confidence: None,
             raw_response: serde_json::Value::Null,

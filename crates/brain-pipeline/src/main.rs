@@ -1,11 +1,6 @@
-//! brain-pipeline - AI processing pipeline
-//!
-//! Processes raw data through AI models and creates events.
+//! brain-pipeline - AI processing pipeline binary
 
-mod builder;
-mod processor;
-mod queue;
-
+use brain_pipeline::{processor, queue};
 use brain_core::BrainConfig;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -26,18 +21,6 @@ enum Commands {
         #[arg(short, long)]
         limit: Option<usize>,
     },
-    /// Add a task to the queue
-    Add {
-        /// Task type (image.analyze, text.analyze, etc.)
-        #[arg(long)]
-        task: String,
-        /// Input file path
-        #[arg(long)]
-        input: String,
-        /// Source description
-        #[arg(long)]
-        source: Option<String>,
-    },
     /// Show queue status
     Status,
 }
@@ -57,17 +40,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Process { limit } => {
-            processor::process_queue(&config, limit).await?;
-        }
-        Commands::Add {
-            task,
-            input,
-            source,
-        } => {
-            queue::add_task(&config, &task, &input, source.as_deref()).await?;
+            if let Err(e) = processor::process_queue(&config, limit).await {
+                eprintln!("Processing failed: {}", e);
+            }
         }
         Commands::Status => {
-            queue::show_status(&config)?;
+            if let Err(e) = queue::show_status(&config) {
+                eprintln!("Show status failed: {}", e);
+            }
         }
     }
 

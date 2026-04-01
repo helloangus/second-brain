@@ -55,8 +55,7 @@ impl EventSerializer {
             }
         }
 
-        // Status and confidence
-        yaml.push_str(&format!("status: {}\n", event.status));
+        // Confidence
         yaml.push_str(&format!("confidence: {}\n", event.confidence));
 
         // Entities
@@ -398,7 +397,6 @@ mod tests {
             created_at: None,
             ingested_at: None,
             source: EventSource::default(),
-            status: "manual".to_string(),
             confidence: 0.9,
             entities: EventEntities::default(),
             tags: vec!["research".to_string(), "gpu".to_string()],

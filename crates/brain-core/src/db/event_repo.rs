@@ -25,10 +25,10 @@ impl<'a> EventRepository<'a> {
         self.conn.execute(
             r#"INSERT OR REPLACE INTO events
                (id, schema_version, time_start, time_end, timezone, type, subtype,
-                source_device, source_channel, source_capture_agent, status, confidence,
+                source_device, source_channel, source_capture_agent, confidence,
                 ai_summary, ai_topics, ai_sentiment, extraction_version,
                 importance, recurrence, created_at, ingested_at, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)"#,
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)"#,
             params![
                 event.id,
                 event.schema_version,
@@ -40,7 +40,6 @@ impl<'a> EventRepository<'a> {
                 event.source.device,
                 event.source.channel,
                 event.source.capture_agent,
-                event.status,
                 event.confidence,
                 event.ai.summary,
                 serde_json::to_string(&event.ai.topics).ok(),
@@ -185,7 +184,13 @@ impl<'a> EventRepository<'a> {
 
     /// Find event by ID
     pub fn find_by_id(&self, id: &str) -> Result<Option<Event>, Error> {
-        let mut stmt = self.conn.prepare("SELECT * FROM events WHERE id = ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, schema_version, time_start, time_end, timezone, type, subtype,
+             source_device, source_channel, source_capture_agent, confidence,
+             ai_summary, ai_topics, ai_sentiment, extraction_version,
+             importance, recurrence, created_at, ingested_at, updated_at
+             FROM events WHERE id = ?1",
+        )?;
 
         let mut rows = stmt.query(params![id])?;
 
@@ -199,7 +204,11 @@ impl<'a> EventRepository<'a> {
     /// Search events by keyword using FTS
     pub fn search(&self, keyword: &str) -> Result<Vec<Event>, Error> {
         let mut stmt = self.conn.prepare(
-            r#"SELECT e.* FROM events e
+            r#"SELECT e.id, e.schema_version, e.time_start, e.time_end, e.timezone, e.type, e.subtype,
+               e.source_device, e.source_channel, e.source_capture_agent, e.confidence,
+               e.ai_summary, e.ai_topics, e.ai_sentiment, e.extraction_version,
+               e.importance, e.recurrence, e.created_at, e.ingested_at, e.updated_at
+               FROM events e
                JOIN events_fts fts ON e.id = fts.id
                WHERE events_fts MATCH ?1
                ORDER BY rank"#,
@@ -222,7 +231,11 @@ impl<'a> EventRepository<'a> {
         end: DateTime<Utc>,
     ) -> Result<Vec<Event>, Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT * FROM events WHERE time_start >= ?1 AND time_start <= ?2 ORDER BY time_start",
+            "SELECT id, schema_version, time_start, time_end, timezone, type, subtype,
+             source_device, source_channel, source_capture_agent, confidence,
+             ai_summary, ai_topics, ai_sentiment, extraction_version,
+             importance, recurrence, created_at, ingested_at, updated_at
+             FROM events WHERE time_start >= ?1 AND time_start <= ?2 ORDER BY time_start",
         )?;
 
         let mut rows = stmt.query(params![start.timestamp(), end.timestamp()])?;
@@ -237,9 +250,13 @@ impl<'a> EventRepository<'a> {
 
     /// Get all events
     pub fn all(&self) -> Result<Vec<Event>, Error> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT * FROM events ORDER BY time_start DESC")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, schema_version, time_start, time_end, timezone, type, subtype,
+             source_device, source_channel, source_capture_agent, confidence,
+             ai_summary, ai_topics, ai_sentiment, extraction_version,
+             importance, recurrence, created_at, ingested_at, updated_at
+             FROM events ORDER BY time_start DESC",
+        )?;
         let mut rows = stmt.query([])?;
         let mut events = Vec::new();
 
@@ -269,7 +286,7 @@ impl<'a> EventRepository<'a> {
             _ => crate::models::EventType::Other,
         };
 
-        let ai_topics_str: Option<String> = row.get(13)?;
+        let ai_topics_str: Option<String> = row.get(12)?;
         let ai_topics: Vec<String> = ai_topics_str
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default();
@@ -285,32 +302,31 @@ impl<'a> EventRepository<'a> {
                 timezone,
             },
             created_at: row
-                .get::<_, Option<i64>>(18)?
+                .get::<_, Option<i64>>(17)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
             ingested_at: row
-                .get::<_, Option<i64>>(19)?
+                .get::<_, Option<i64>>(18)?
                 .and_then(|ts| DateTime::from_timestamp(ts, 0)),
             source: EventSource {
                 device: row.get(7)?,
                 channel: row.get(8)?,
                 capture_agent: row.get(9)?,
             },
-            status: row.get(10)?,
-            confidence: row.get(11)?,
+            confidence: row.get(10)?,
             entities: EventEntities::default(),
             tags: Vec::new(),
             raw_refs: RawRefs::default(),
             derived_refs: DerivedRefs::default(),
             ai: EventAi {
-                summary: row.get(12)?,
+                summary: row.get(11)?,
                 topics: ai_topics,
-                sentiment: row.get(14)?,
-                extraction_version: row.get(15)?,
+                sentiment: row.get(13)?,
+                extraction_version: row.get(14)?,
             },
             relations: EventRelations::default(),
             graph_hints: GraphHints {
-                importance: row.get(16)?,
-                recurrence: row.get::<_, i32>(17)? != 0,
+                importance: row.get(15)?,
+                recurrence: row.get::<_, i32>(16)? != 0,
             },
             schema_version: row.get(1)?,
         })

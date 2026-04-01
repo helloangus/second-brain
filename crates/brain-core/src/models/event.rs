@@ -37,6 +37,25 @@ impl std::fmt::Display for EventType {
     }
 }
 
+impl EventType {
+    /// Parse EventType from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "meeting" => Some(EventType::Meeting),
+            "photo" => Some(EventType::Photo),
+            "note" => Some(EventType::Note),
+            "activity" => Some(EventType::Activity),
+            "research" => Some(EventType::Research),
+            "reading" => Some(EventType::Reading),
+            "exercise" => Some(EventType::Exercise),
+            "meal" => Some(EventType::Meal),
+            "work" => Some(EventType::Work),
+            "other" => Some(EventType::Other),
+            _ => None,
+        }
+    }
+}
+
 /// Source information
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -151,8 +170,6 @@ pub struct Event {
     pub ingested_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub source: EventSource,
-    #[serde(default = "default_status")]
-    pub status: String,
     #[serde(default = "default_confidence")]
     pub confidence: f64,
     #[serde(default)]
@@ -171,10 +188,6 @@ pub struct Event {
     pub graph_hints: GraphHints,
     #[serde(default = "default_schema_version")]
     pub schema_version: i32,
-}
-
-fn default_status() -> String {
-    "auto".to_string()
 }
 
 fn default_confidence() -> f64 {

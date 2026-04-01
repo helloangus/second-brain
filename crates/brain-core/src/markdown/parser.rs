@@ -69,8 +69,6 @@ struct ParsedEventFrontmatter {
     ingested_at: Option<String>,
     #[serde(default)]
     source: Option<ParsedEventSource>,
-    #[serde(default = "default_status")]
-    status: String,
     #[serde(default = "default_confidence")]
     confidence: f64,
     #[serde(default)]
@@ -93,10 +91,6 @@ struct ParsedEventFrontmatter {
 
 fn default_schema() -> String {
     "event/v1".to_string()
-}
-
-fn default_status() -> String {
-    "auto".to_string()
 }
 
 fn default_confidence() -> f64 {
@@ -267,7 +261,6 @@ impl ParsedEventFrontmatter {
                     capture_agent: s.capture_agent,
                 })
                 .unwrap_or_default(),
-            status: self.status,
             confidence: self.confidence,
             entities: EventEntities {
                 people: entities.people,

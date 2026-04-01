@@ -11,14 +11,38 @@ pub struct RawDataInput {
     pub path: String,
     #[serde(default)]
     pub metadata: std::collections::HashMap<String, String>,
+    /// Dictionary context for AI to prefer existing values
+    #[serde(default)]
+    pub dict_context: Option<DictContext>,
+}
+
+/// Dictionary context for AI analysis
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DictContext {
+    #[serde(default)]
+    pub event_types: Vec<String>,
+    #[serde(default)]
+    pub event_subtypes: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub topics: Vec<String>,
 }
 
 /// Output from model analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
     pub summary: Option<String>,
+    /// Event type suggested by AI
+    #[serde(default)]
+    pub type_: Option<String>,
+    /// Event subtype suggested by AI
+    #[serde(default)]
+    pub subtype: Option<String>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub topics: Vec<String>,
     #[serde(default)]
     pub entities: Vec<String>,
     pub confidence: Option<f64>,

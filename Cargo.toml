@@ -16,6 +16,7 @@ license = "MIT"
 [workspace.dependencies]
 # Core
 brain-core = { path = "crates/brain-core" }
+brain-pipeline = { path = "crates/brain-pipeline" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
@@ -37,7 +38,8 @@ gray_matter = "0.2"
 pulldown-cmark = "0.10"
 
 # HTTP client (for adapters)
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json"] }
+ureq = { version = "2.9", features = ["json"] }
 
 # Logging
 tracing = "0.1"

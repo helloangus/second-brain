@@ -47,6 +47,54 @@ enum Commands {
         #[arg(long)]
         tags: Option<String>,
     },
+    /// Ingest a file and queue for AI processing
+    Ingest {
+        /// Path to file to ingest
+        #[arg(short, long)]
+        file: String,
+        /// Source identifier (channel)
+        #[arg(short, long, default_value = "CLI")]
+        source: String,
+        /// Device type
+        #[arg(short, long, default_value = "PC")]
+        device: String,
+        /// Capture agent
+        #[arg(short, long, default_value = "manual_entry")]
+        agent: String,
+        /// Data type (text, image, audio, video, document)
+        #[arg(short, long, default_value = "text")]
+        type_: String,
+        /// Process immediately with AI
+        #[arg(short = 'p', long, default_value = "false")]
+        process: bool,
+    },
+    /// Process pending tasks in AI pipeline
+    Process {
+        /// Limit number of tasks to process
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+    /// View and query system logs
+    Logs {
+        /// Filter by log type (crud, ai_processing, pipeline, system)
+        #[arg(short, long)]
+        log_type: Option<String>,
+        /// Filter by target type (event, entity, tag, pipeline_task)
+        #[arg(short, long)]
+        target_type: Option<String>,
+        /// Filter by target ID
+        #[arg(short, long)]
+        target_id: Option<String>,
+        /// Maximum number of entries to show
+        #[arg(short, long)]
+        limit: Option<usize>,
+        /// Show AI processing statistics
+        #[arg(long, default_value = "false")]
+        stats: bool,
+        /// Number of days for statistics (default: 7)
+        #[arg(long)]
+        days: Option<u32>,
+    },
     /// Entity commands
     Entity {
         #[command(subcommand)]
@@ -80,7 +128,8 @@ fn parse_month(s: &str) -> Result<String, String> {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
@@ -111,6 +160,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
                 .unwrap_or_default();
             commands::add::execute(&config, &type_, &summary, &tags)?;
+        }
+        Commands::Ingest {
+            file,
+            source,
+            device,
+            agent,
+            type_,
+            process,
+        } => {
+            commands::ingest::execute(&config, &file, &source, &device, &agent, &type_, process).await?;
+        }
+        Commands::Process { limit } => {
+            commands::process::execute(&config, limit)?;
+        }
+        Commands::Logs {
+            log_type,
+            target_type,
+            target_id,
+            limit,
+            stats,
+            days,
+        } => {
+            commands::logs::execute(&config, log_type.as_deref(), target_type.as_deref(), target_id.as_deref(), limit, stats, days)?;
         }
         Commands::Entity { command } => match command {
             EntityCommands::List { type_ } => {

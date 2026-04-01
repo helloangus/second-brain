@@ -1,6 +1,6 @@
 //! Queue management
 
-use brain_core::{BrainConfig, PipelineInput, PipelineTask, TaskStatus, TaskType};
+use brain_core::{BrainConfig, PipelineInput, PipelineTask, RawDataType, TaskStatus, TaskType};
 use std::fs;
 use std::path::Path;
 use tracing::info;
@@ -11,8 +11,11 @@ pub async fn add_task(
     config: &BrainConfig,
     task_type: &str,
     input_path: &str,
-    source: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
+    channel: Option<&str>,
+    device: Option<&str>,
+    capture_agent: Option<&str>,
+    data_type: RawDataType,
+) -> Result<String, Box<dyn std::error::Error>> {
     let task =
         TaskType::from_str(task_type).ok_or_else(|| format!("Unknown task type: {}", task_type))?;
 
@@ -23,7 +26,10 @@ pub async fn add_task(
         task,
         input: PipelineInput {
             path: input_path.to_string(),
-            source: source.map(|s| s.to_string()),
+            channel: channel.map(|s| s.to_string()),
+            device: device.map(|s| s.to_string()),
+            capture_agent: capture_agent.map(|s| s.to_string()),
+            data_type,
             metadata: std::collections::HashMap::new(),
         },
         output: None,
@@ -41,7 +47,7 @@ pub async fn add_task(
     info!("Added task {} to queue", task_id);
     println!("Task {} added: {} -> {}", task_id, task_type, input_path);
 
-    Ok(())
+    Ok(task_id)
 }
 
 /// Show queue status

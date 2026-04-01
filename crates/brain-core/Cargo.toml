@@ -16,5 +16,5 @@ uuid.workspace = true
 once_cell.workspace = true
 directories.workspace = true
 tracing.workspace = true
-reqwest.workspace = true
+ureq.workspace = true
 tokio.workspace = true

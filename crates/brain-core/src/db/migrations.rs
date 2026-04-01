@@ -130,6 +130,41 @@ CREATE INDEX IF NOT EXISTS idx_events_time_start ON events(time_start);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
 CREATE INDEX IF NOT EXISTS idx_entities_label ON entities(label);
+
+-- Logs table for comprehensive logging
+CREATE TABLE IF NOT EXISTS logs (
+    id TEXT PRIMARY KEY,
+    timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+
+    -- Classification
+    level TEXT NOT NULL DEFAULT 'info',
+    log_type TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT,
+
+    -- Source context
+    source_device TEXT,
+    source_channel TEXT,
+    source_agent TEXT,
+
+    -- Result
+    success INTEGER NOT NULL DEFAULT 1,
+    error_message TEXT,
+
+    -- Timing (milliseconds)
+    duration_ms INTEGER,
+
+    -- Type-specific data (JSON)
+    metadata TEXT
+);
+
+-- Log indexes
+CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_logs_log_type ON logs(log_type);
+CREATE INDEX IF NOT EXISTS idx_logs_target_type ON logs(target_type);
+CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
+CREATE INDEX IF NOT EXISTS idx_logs_target_id ON logs(target_id);
 "#;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), Error> {

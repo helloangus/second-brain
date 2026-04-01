@@ -46,8 +46,11 @@ pub fn execute(
         },
         created_at: Some(now),
         ingested_at: Some(now),
-        source: EventSource::default(),
-        status: "manual".to_string(),
+        source: EventSource {
+            device: Some("PC".to_string()),
+            channel: Some("CLI".to_string()),
+            capture_agent: Some("manual_entry".to_string()),
+        },
         confidence: 0.5,
         entities: EventEntities::default(),
         tags: tags.to_vec(),
