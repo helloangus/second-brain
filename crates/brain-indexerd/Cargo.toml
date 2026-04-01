@@ -1,0 +1,18 @@
+[package]
+name = "brain-indexerd"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "brain-indexerd"
+path = "src/main.rs"
+
+[dependencies]
+brain-core.workspace = true
+notify.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+walkdir = "2.4"
+rusqlite.workspace = true

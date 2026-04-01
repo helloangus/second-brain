@@ -1,0 +1,17 @@
+# Build artifacts
+/target/
+*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# Release binaries (distribute via GitHub Releases instead)
+/brain
+*.exe

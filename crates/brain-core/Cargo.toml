@@ -1,0 +1,20 @@
+[package]
+name = "brain-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rusqlite.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+gray_matter.workspace = true
+pulldown-cmark.workspace = true
+uuid.workspace = true
+once_cell.workspace = true
+directories.workspace = true
+tracing.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
