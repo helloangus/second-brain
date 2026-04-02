@@ -43,15 +43,16 @@ pub fn execute(
     }
 
     // Query logs
-    let entries: Vec<LogEntry> = if let Some(ref tt) = target_type {
-        if let Some(ref tid) = target_id {
-            let tt = parse_target_type(tt);
-            logger.get_for_target(tt, tid, limit)?
+    #[allow(clippy::needless_borrow)]
+    let entries: Vec<LogEntry> = if let Some(tt) = target_type {
+        if let Some(tid) = target_id {
+            let tt = parse_target_type(&tt);
+            logger.get_for_target(tt, &tid, limit)?
         } else {
             logger.get_recent(limit)?
         }
-    } else if let Some(ref lt) = log_type {
-        let lt = parse_log_type(lt);
+    } else if let Some(lt) = log_type {
+        let lt = parse_log_type(&lt);
         logger.get_by_type(lt, limit)?
     } else {
         logger.get_recent(limit)?
@@ -65,8 +66,10 @@ pub fn execute(
     let count = entries.len();
 
     // Print header
-    println!("{:<8} {:<20} {:<12} {:<12} {:<40} {}",
-        "LEVEL", "TIMESTAMP", "TYPE", "OPERATION", "TARGET", "DURATION");
+    println!(
+        "{:<8} {:<20} {:<12} {:<12} {:<40} DURATION",
+        "LEVEL", "TIMESTAMP", "TYPE", "OPERATION", "TARGET"
+    );
     println!("{}", "=".repeat(100));
 
     for entry in &entries {

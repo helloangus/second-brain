@@ -1,7 +1,9 @@
 //! Task processor
 
 use crate::builder::EventBuilder;
-use brain_core::adapters::{create_adapter, AdapterConfig, DictContext, ModelAdapter, RawDataInput};
+use brain_core::adapters::{
+    create_adapter, AdapterConfig, DictContext, ModelAdapter, RawDataInput,
+};
 use brain_core::{BrainConfig, DictSet, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;
@@ -79,13 +81,15 @@ pub async fn process_queue(
     println!("Processing {} task(s)...", tasks.len());
 
     // Get adapter configuration
-    let adapter_config = config
-        .adapters
-        .first()
-        .cloned()
-        .unwrap_or_else(|| AdapterConfig::ollama("http://localhost:11434", "qwen3.5:9b-q4_K_M"));
+    let adapter_config =
+        config.adapters.first().cloned().unwrap_or_else(|| {
+            AdapterConfig::ollama("http://localhost:11434", "qwen3.5:9b-q4_K_M")
+        });
 
-    let adapter = Arc::new(create_adapter(&adapter_config).map_err(|e| PipelineError(format!("Adapter error: {}", e)))?);
+    let adapter = Arc::new(
+        create_adapter(&adapter_config)
+            .map_err(|e| PipelineError(format!("Adapter error: {}", e)))?,
+    );
 
     // Clone config for each task since we'll move it into closures
     let config_clone = config.clone();
@@ -130,7 +134,8 @@ pub async fn process_queue(
         // with the blocking HTTP client
         let task_result = tokio::task::spawn_blocking(move || {
             process_task_sync(&task, adapter_clone.as_ref().as_ref(), &config_for_task)
-        }).await;
+        })
+        .await;
 
         let elapsed = start.elapsed();
         total_duration += elapsed;
@@ -141,7 +146,11 @@ pub async fn process_queue(
                 let done_path = done_dir.join(task_path.file_name().unwrap());
                 if fs::rename(&processing_path, &done_path).is_ok() {
                     processed += 1;
-                    println!("  Task {} completed in {:.2}s", task_id, elapsed.as_secs_f64());
+                    println!(
+                        "  Task {} completed in {:.2}s",
+                        task_id,
+                        elapsed.as_secs_f64()
+                    );
                     info!("Task {} completed", task_id);
                 }
             }
@@ -162,20 +171,35 @@ pub async fn process_queue(
     } else {
         0.0
     };
-    println!("Processed: {} ({:.2}s total, {:.2}s avg)", processed, total_duration.as_secs_f64(), avg_time);
+    println!(
+        "Processed: {} ({:.2}s total, {:.2}s avg)",
+        processed,
+        total_duration.as_secs_f64(),
+        avg_time
+    );
     println!("Failed: {}", failed);
 
     Ok(())
 }
 
 /// Load dictionary context for AI prompts
-fn load_dict_context(dicts_path: &std::path::PathBuf) -> DictContext {
+fn load_dict_context(dicts_path: &std::path::Path) -> DictContext {
     match DictSet::load(dicts_path) {
         Ok(dicts) => DictContext {
-            event_types: dicts.event_type.keys().into_iter().map(|s| s.clone()).collect(),
-            event_subtypes: dicts.event_subtype.keys().into_iter().map(|s| s.clone()).collect(),
-            tags: dicts.tags.keys().into_iter().map(|s| s.clone()).collect(),
-            topics: dicts.topics.keys().into_iter().map(|s| s.clone()).collect(),
+            event_types: dicts
+                .event_type
+                .keys()
+                .into_iter()
+                .cloned()
+                .collect(),
+            event_subtypes: dicts
+                .event_subtype
+                .keys()
+                .into_iter()
+                .cloned()
+                .collect(),
+            tags: dicts.tags.keys().into_iter().cloned().collect(),
+            topics: dicts.topics.keys().into_iter().cloned().collect(),
         },
         Err(_) => DictContext::default(),
     }
@@ -234,10 +258,15 @@ fn process_task_sync(
                     file_size_bytes,
                     None,
                 );
-                println!("  AI analysis: {:.2}s ({})", ai_elapsed.as_secs_f64(), data_type_str);
+                println!(
+                    "  AI analysis: {:.2}s ({})",
+                    ai_elapsed.as_secs_f64(),
+                    data_type_str
+                );
 
                 PipelineOutput {
                     summary: analysis.summary,
+                    extended: analysis.extended,
                     type_: analysis.type_,
                     subtype: analysis.subtype,
                     tags: analysis.tags,
@@ -290,7 +319,8 @@ fn process_task_sync(
         &task.input.channel,
         &task.input.device,
         &task.input.capture_agent,
-    ).map_err(|e| PipelineError(format!("Event build error: {}", e)))?;
+    )
+    .map_err(|e| PipelineError(format!("Event build error: {}", e)))?;
 
     // Save event to file
     let year = event.time.start.format("%Y").to_string();
@@ -303,7 +333,9 @@ fn process_task_sync(
 
     fs::create_dir_all(event_path.parent().unwrap())?;
     let serializer = brain_core::markdown::EventSerializer;
-    let markdown = serializer.serialize(&event).map_err(|e| PipelineError(format!("Serialize error: {}", e)))?;
+    let markdown = serializer
+        .serialize(&event)
+        .map_err(|e| PipelineError(format!("Serialize error: {}", e)))?;
     fs::write(&event_path, &markdown).map_err(|e| PipelineError(format!("Write error: {}", e)))?;
 
     info!("Created event: {} at {:?}", event.id, event_path);
@@ -323,10 +355,12 @@ fn process_task_sync(
     );
 
     // Also index in database
-    let db = brain_core::Database::open(&config.db_path).map_err(|e| PipelineError(format!("DB open error: {}", e)))?;
+    let db = brain_core::Database::open(&config.db_path)
+        .map_err(|e| PipelineError(format!("DB open error: {}", e)))?;
     let conn = db.connection();
     let repo = brain_core::EventRepository::new(&conn);
-    repo.upsert(&event).map_err(|e| PipelineError(format!("Repo error: {}", e)))?;
+    repo.upsert(&event)
+        .map_err(|e| PipelineError(format!("Repo error: {}", e)))?;
 
     Ok(())
 }

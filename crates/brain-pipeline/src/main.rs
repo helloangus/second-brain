@@ -1,7 +1,7 @@
 //! brain-pipeline - AI processing pipeline binary
 
-use brain_pipeline::{processor, queue};
 use brain_core::BrainConfig;
+use brain_pipeline::{processor, queue};
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 

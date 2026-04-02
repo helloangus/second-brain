@@ -7,7 +7,10 @@ use std::process::Command;
 ///
 /// Processes all pending tasks in the AI pipeline queue.
 /// This invokes the brain-pipeline binary directly to avoid tokio runtime conflicts.
-pub fn execute(_config: &BrainConfig, limit: Option<usize>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn execute(
+    _config: &BrainConfig,
+    limit: Option<usize>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Find the brain-pipeline binary
     let pipeline_binary = std::env::current_exe()?
         .parent()
@@ -28,6 +31,10 @@ pub fn execute(_config: &BrainConfig, limit: Option<usize>) -> Result<(), Box<dy
     if status.success() {
         Ok(())
     } else {
-        Err(format!("Pipeline process failed with exit code: {:?}", status.code()).into())
+        Err(format!(
+            "Pipeline process failed with exit code: {:?}",
+            status.code()
+        )
+        .into())
     }
 }

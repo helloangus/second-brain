@@ -92,12 +92,21 @@ impl EventSerializer {
         }
 
         // AI
-        if event.ai.summary.is_some() || !event.ai.topics.is_empty() || event.ai.sentiment.is_some()
+        if event.ai.summary.is_some()
+            || event.ai.extended.is_some()
+            || !event.ai.topics.is_empty()
+            || event.ai.sentiment.is_some()
         {
             yaml.push_str("ai:\n");
             if let Some(ref summary) = event.ai.summary {
                 yaml.push_str("  summary: >\n");
                 for line in summary.lines() {
+                    yaml.push_str(&format!("    {}\n", line));
+                }
+            }
+            if let Some(ref extended) = event.ai.extended {
+                yaml.push_str("  extended: >\n");
+                for line in extended.lines() {
                     yaml.push_str(&format!("    {}\n", line));
                 }
             }

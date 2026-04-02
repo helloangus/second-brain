@@ -20,39 +20,46 @@ impl<'a> LogRepository<'a> {
         let timestamp = entry.timestamp.timestamp();
         let duration_ms: Option<i64> = entry.duration_ms.map(|v| v as i64);
 
-        self.conn.execute(
-            r#"
+        self.conn
+            .execute(
+                r#"
             INSERT INTO logs (
                 id, timestamp, level, log_type, operation, target_type, target_id,
                 source_device, source_channel, source_agent,
                 success, error_message, duration_ms, metadata
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
-            params![
-                entry.id,
-                timestamp,
-                entry.level.to_string(),
-                entry.log_type.to_string(),
-                entry.operation,
-                entry.target_type.to_string(),
-                entry.target_id,
-                entry.source.device,
-                entry.source.channel,
-                entry.source.agent,
-                entry.success as i32,
-                entry.error_message,
-                duration_ms,
-                entry.metadata.as_ref().and_then(|m| serde_json::to_string(m).ok()),
-            ],
-        ).map_err(|e| Error::Config(format!("Failed to insert log: {}", e)))?;
+                params![
+                    entry.id,
+                    timestamp,
+                    entry.level.to_string(),
+                    entry.log_type.to_string(),
+                    entry.operation,
+                    entry.target_type.to_string(),
+                    entry.target_id,
+                    entry.source.device,
+                    entry.source.channel,
+                    entry.source.agent,
+                    entry.success as i32,
+                    entry.error_message,
+                    duration_ms,
+                    entry
+                        .metadata
+                        .as_ref()
+                        .and_then(|m| serde_json::to_string(m).ok()),
+                ],
+            )
+            .map_err(|e| Error::Config(format!("Failed to insert log: {}", e)))?;
 
         Ok(())
     }
 
     /// Query logs by log type
     pub fn query_by_type(&self, log_type: LogType, limit: usize) -> Result<Vec<LogEntry>> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
             SELECT id, timestamp, level, log_type, operation, target_type, target_id,
                    source_device, source_channel, source_agent,
                    success, error_message, duration_ms, metadata
@@ -61,7 +68,8 @@ impl<'a> LogRepository<'a> {
             ORDER BY timestamp DESC
             LIMIT ?
             "#,
-        ).map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
+            )
+            .map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
 
         let entries = stmt
             .query_map(params![log_type.to_string(), limit as i64], |row| {
@@ -81,8 +89,10 @@ impl<'a> LogRepository<'a> {
         target_id: &str,
         limit: usize,
     ) -> Result<Vec<LogEntry>> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
             SELECT id, timestamp, level, log_type, operation, target_type, target_id,
                    source_device, source_channel, source_agent,
                    success, error_message, duration_ms, metadata
@@ -91,12 +101,14 @@ impl<'a> LogRepository<'a> {
             ORDER BY timestamp DESC
             LIMIT ?
             "#,
-        ).map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
+            )
+            .map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
 
         let entries = stmt
-            .query_map(params![target_type.to_string(), target_id, limit as i64], |row| {
-                self.row_to_entry(row)
-            })
+            .query_map(
+                params![target_type.to_string(), target_id, limit as i64],
+                |row| self.row_to_entry(row),
+            )
             .map_err(|e| Error::Config(format!("Failed to query: {}", e)))?
             .filter_map(|r| r.ok())
             .collect();
@@ -111,8 +123,10 @@ impl<'a> LogRepository<'a> {
         end: DateTime<Utc>,
         limit: usize,
     ) -> Result<Vec<LogEntry>> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
             SELECT id, timestamp, level, log_type, operation, target_type, target_id,
                    source_device, source_channel, source_agent,
                    success, error_message, duration_ms, metadata
@@ -121,7 +135,8 @@ impl<'a> LogRepository<'a> {
             ORDER BY timestamp DESC
             LIMIT ?
             "#,
-        ).map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
+            )
+            .map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
 
         let entries = stmt
             .query_map(
@@ -137,8 +152,10 @@ impl<'a> LogRepository<'a> {
 
     /// Get recent logs
     pub fn query_recent(&self, limit: usize) -> Result<Vec<LogEntry>> {
-        let mut stmt = self.conn.prepare(
-            r#"
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
             SELECT id, timestamp, level, log_type, operation, target_type, target_id,
                    source_device, source_channel, source_agent,
                    success, error_message, duration_ms, metadata
@@ -146,7 +163,8 @@ impl<'a> LogRepository<'a> {
             ORDER BY timestamp DESC
             LIMIT ?
             "#,
-        ).map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
+            )
+            .map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
 
         let entries = stmt
             .query_map(params![limit as i64], |row| self.row_to_entry(row))
@@ -161,8 +179,10 @@ impl<'a> LogRepository<'a> {
     pub fn get_ai_stats(&self, days: u32) -> Result<AiProcessingStats> {
         let cutoff = Utc::now() - chrono::Duration::days(days as i64);
 
-        let mut stmt = self.conn.prepare(
-            r#"
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
             SELECT
                 COUNT(*) as total,
                 COALESCE(SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END), 0) as successful,
@@ -171,7 +191,8 @@ impl<'a> LogRepository<'a> {
             FROM logs
             WHERE log_type = 'ai_processing' AND timestamp >= ?
             "#,
-        ).map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
+            )
+            .map_err(|e| Error::Config(format!("Failed to prepare query: {}", e)))?;
 
         let stats = stmt
             .query_row(params![cutoff.timestamp()], |row| {
@@ -218,9 +239,7 @@ impl<'a> LogRepository<'a> {
             },
             success: row.get::<_, i32>(10)? != 0,
             error_message: row.get(11)?,
-            duration_ms: row
-                .get::<_, Option<i64>>(12)?
-                .map(|v| v as u64),
+            duration_ms: row.get::<_, Option<i64>>(12)?.map(|v| v as u64),
             metadata,
         })
     }

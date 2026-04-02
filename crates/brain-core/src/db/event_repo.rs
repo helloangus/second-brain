@@ -319,6 +319,7 @@ impl<'a> EventRepository<'a> {
             derived_refs: DerivedRefs::default(),
             ai: EventAi {
                 summary: row.get(11)?,
+                extended: None,
                 topics: ai_topics,
                 sentiment: row.get(13)?,
                 extraction_version: row.get(14)?,

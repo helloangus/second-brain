@@ -4,8 +4,8 @@
 
 use crate::error::Result;
 use crate::logging::log::{
-    AiProcessingMetadata, CrudMetadata, CrudOperation, LogEntry, LogLevel, LogSource,
-    LogType, PipelineMetadata, TargetType,
+    AiProcessingMetadata, CrudMetadata, CrudOperation, LogEntry, LogLevel, LogSource, LogType,
+    PipelineMetadata, TargetType,
 };
 use crate::logging::repo::LogRepository;
 use crate::BrainConfig;
@@ -107,6 +107,7 @@ impl Logger {
     }
 
     /// Log AI processing with timing and metadata
+    #[allow(clippy::too_many_arguments)]
     pub fn log_ai_processing(
         &self,
         input_path: &str,
@@ -131,9 +132,10 @@ impl Logger {
                 output_summary_length: None,
             };
 
-            let mut entry = LogEntry::new(LogType::AiProcessing, "analyze", TargetType::PipelineTask)
-                .with_duration_ms(duration_ms)
-                .with_metadata(metadata);
+            let mut entry =
+                LogEntry::new(LogType::AiProcessing, "analyze", TargetType::PipelineTask)
+                    .with_duration_ms(duration_ms)
+                    .with_metadata(metadata);
 
             if !success {
                 entry = entry.with_error(error_msg.unwrap_or("Unknown error"));
@@ -195,12 +197,7 @@ impl Logger {
     }
 
     /// Log queue add (task added to pending queue)
-    pub fn log_queue_add(
-        &self,
-        task_id: &str,
-        task_type: &str,
-        input_path: &str,
-    ) -> Result<()> {
+    pub fn log_queue_add(&self, task_id: &str, task_type: &str, _input_path: &str) -> Result<()> {
         self.with_current_log_repo(|conn| {
             let repo = LogRepository::new(conn);
 
@@ -235,8 +232,8 @@ impl Logger {
                 version: None,
             };
 
-            let mut entry = LogEntry::new(LogType::System, action, TargetType::System)
-                .with_metadata(metadata);
+            let mut entry =
+                LogEntry::new(LogType::System, action, TargetType::System).with_metadata(metadata);
 
             if let Some(ms) = duration_ms {
                 entry = entry.with_duration_ms(ms);
@@ -267,7 +264,12 @@ impl Logger {
     }
 
     /// Query logs for a specific target from all log databases
-    pub fn get_for_target(&self, target_type: TargetType, target_id: &str, limit: usize) -> Result<Vec<LogEntry>> {
+    pub fn get_for_target(
+        &self,
+        target_type: TargetType,
+        target_id: &str,
+        limit: usize,
+    ) -> Result<Vec<LogEntry>> {
         let mut all_entries = Vec::new();
 
         for db_path in self.config.all_log_db_paths() {
@@ -337,7 +339,11 @@ impl Logger {
             }
         }
 
-        let avg_duration = if count > 0 { duration_sum / count as f64 } else { 0.0 };
+        let avg_duration = if count > 0 {
+            duration_sum / count as f64
+        } else {
+            0.0
+        };
 
         Ok(crate::logging::repo::AiProcessingStats {
             total_operations: total as u64,

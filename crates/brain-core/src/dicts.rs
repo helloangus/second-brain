@@ -7,7 +7,7 @@ use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// A single dictionary entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,7 +179,7 @@ pub struct DictSet {
 
 impl DictSet {
     /// Load all dictionaries from the dicts directory
-    pub fn load(dicts_path: &PathBuf) -> Result<Self> {
+    pub fn load(dicts_path: &Path) -> Result<Self> {
         Ok(Self {
             device: Dict::load(&dicts_path.join("device.yaml"))?,
             channel: Dict::load(&dicts_path.join("channel.yaml"))?,
@@ -192,12 +192,14 @@ impl DictSet {
     }
 
     /// Save all dictionaries
-    pub fn save(&self, dicts_path: &PathBuf) -> Result<()> {
+    pub fn save(&self, dicts_path: &Path) -> Result<()> {
         self.device.save(&dicts_path.join("device.yaml"))?;
         self.channel.save(&dicts_path.join("channel.yaml"))?;
-        self.capture_agent.save(&dicts_path.join("capture_agent.yaml"))?;
+        self.capture_agent
+            .save(&dicts_path.join("capture_agent.yaml"))?;
         self.event_type.save(&dicts_path.join("event_type.yaml"))?;
-        self.event_subtype.save(&dicts_path.join("event_subtype.yaml"))?;
+        self.event_subtype
+            .save(&dicts_path.join("event_subtype.yaml"))?;
         self.tags.save(&dicts_path.join("tags.yaml"))?;
         self.topics.save(&dicts_path.join("topics.yaml"))?;
         Ok(())
@@ -206,31 +208,99 @@ impl DictSet {
     /// Create default dictionaries with common values
     pub fn default_dicts() -> Self {
         let mut device = Dict::default();
-        device.add(DictEntry::new("PC").with_zh("个人电脑").with_description("本地桌面或笔记本设备"));
-        device.add(DictEntry::new("iPhone").with_zh("iPhone").with_description("苹果手机"));
-        device.add(DictEntry::new("Android").with_zh("安卓手机").with_description("安卓手机设备"));
-        device.add(DictEntry::new("Server").with_zh("服务器").with_description("远程服务器"));
+        device.add(
+            DictEntry::new("PC")
+                .with_zh("个人电脑")
+                .with_description("本地桌面或笔记本设备"),
+        );
+        device.add(
+            DictEntry::new("iPhone")
+                .with_zh("iPhone")
+                .with_description("苹果手机"),
+        );
+        device.add(
+            DictEntry::new("Android")
+                .with_zh("安卓手机")
+                .with_description("安卓手机设备"),
+        );
+        device.add(
+            DictEntry::new("Server")
+                .with_zh("服务器")
+                .with_description("远程服务器"),
+        );
 
         let mut channel = Dict::default();
-        channel.add(DictEntry::new("CLI").with_zh("命令行").with_description("通过命令行界面输入"));
-        channel.add(DictEntry::new("API").with_zh("API接口").with_description("通过编程接口输入"));
-        channel.add(DictEntry::new("Web").with_zh("网页").with_description("通过网页界面输入"));
+        channel.add(
+            DictEntry::new("CLI")
+                .with_zh("命令行")
+                .with_description("通过命令行界面输入"),
+        );
+        channel.add(
+            DictEntry::new("API")
+                .with_zh("API接口")
+                .with_description("通过编程接口输入"),
+        );
+        channel.add(
+            DictEntry::new("Web")
+                .with_zh("网页")
+                .with_description("通过网页界面输入"),
+        );
 
         let mut capture_agent = Dict::default();
-        capture_agent.add(DictEntry::new("manual_entry").with_zh("手动录入").with_description("用户手动输入"));
-        capture_agent.add(DictEntry::new("pipeline").with_zh("AI流水线").with_description("AI自动处理生成"));
-        capture_agent.add(DictEntry::new("sync_service").with_zh("同步服务").with_description("第三方服务同步"));
+        capture_agent.add(
+            DictEntry::new("manual_entry")
+                .with_zh("手动录入")
+                .with_description("用户手动输入"),
+        );
+        capture_agent.add(
+            DictEntry::new("pipeline")
+                .with_zh("AI流水线")
+                .with_description("AI自动处理生成"),
+        );
+        capture_agent.add(
+            DictEntry::new("sync_service")
+                .with_zh("同步服务")
+                .with_description("第三方服务同步"),
+        );
 
         let mut event_type = Dict::default();
-        event_type.add(DictEntry::new("note").with_zh("笔记").with_description("普通笔记"));
-        event_type.add(DictEntry::new("task").with_zh("任务").with_description("待办或已完成的任务"));
-        event_type.add(DictEntry::new("research").with_zh("研究").with_description("研究或学习相关"));
-        event_type.add(DictEntry::new("photo").with_zh("照片").with_description("照片或图像记录"));
+        event_type.add(
+            DictEntry::new("note")
+                .with_zh("笔记")
+                .with_description("普通笔记"),
+        );
+        event_type.add(
+            DictEntry::new("task")
+                .with_zh("任务")
+                .with_description("待办或已完成的任务"),
+        );
+        event_type.add(
+            DictEntry::new("research")
+                .with_zh("研究")
+                .with_description("研究或学习相关"),
+        );
+        event_type.add(
+            DictEntry::new("photo")
+                .with_zh("照片")
+                .with_description("照片或图像记录"),
+        );
 
         let mut event_subtype = Dict::default();
-        event_subtype.add(DictEntry::new("summarize").with_zh("摘要").with_description("AI生成的摘要"));
-        event_subtype.add(DictEntry::new("reasoning").with_zh("推理").with_description("AI推理分析"));
-        event_subtype.add(DictEntry::new("image_caption").with_zh("图片说明").with_description("图片描述生成"));
+        event_subtype.add(
+            DictEntry::new("summarize")
+                .with_zh("摘要")
+                .with_description("AI生成的摘要"),
+        );
+        event_subtype.add(
+            DictEntry::new("reasoning")
+                .with_zh("推理")
+                .with_description("AI推理分析"),
+        );
+        event_subtype.add(
+            DictEntry::new("image_caption")
+                .with_zh("图片说明")
+                .with_description("图片描述生成"),
+        );
 
         let mut tags = Dict::default();
         tags.add(DictEntry::new("AI").with_zh("人工智能"));
@@ -282,7 +352,10 @@ pub fn prompt_selection(dict: &Dict, input: &str, dict_name: &str) -> Result<(St
             println!("  - {} ({})", entry.key, zh);
         }
     }
-    println!("\nEnter 'new' to create '{}' as a new value, or enter an existing value to use it:", input);
+    println!(
+        "\nEnter 'new' to create '{}' as a new value, or enter an existing value to use it:",
+        input
+    );
 
     // Read from stdin
     let mut choice = String::new();
@@ -304,7 +377,9 @@ mod tests {
 
     #[test]
     fn test_dict_entry() {
-        let entry = DictEntry::new("test").with_zh("测试").with_description("A test entry");
+        let entry = DictEntry::new("test")
+            .with_zh("测试")
+            .with_description("A test entry");
         assert_eq!(entry.key, "test");
         assert_eq!(entry.zh, Some("测试".to_string()));
         assert_eq!(entry.description, Some("A test entry".to_string()));

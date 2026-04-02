@@ -167,6 +167,9 @@ pub struct PipelineInput {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PipelineOutput {
     pub summary: Option<String>,
+    /// Extended content - longer text that doesn't fit in summary
+    #[serde(default)]
+    pub extended: Option<String>,
     /// Event type (e.g., note, task, research, photo)
     #[serde(default)]
     pub type_: Option<String>,

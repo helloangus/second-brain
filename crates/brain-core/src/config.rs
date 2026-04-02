@@ -132,7 +132,9 @@ impl BrainConfig {
                     if let Ok(sub_entries) = fs::read_dir(&path) {
                         for sub_entry in sub_entries.filter_map(|e| e.ok()) {
                             let sub_path = sub_entry.path();
-                            if sub_path.is_file() && sub_path.extension().map(|e| e == "db").unwrap_or(false) {
+                            if sub_path.is_file()
+                                && sub_path.extension().map(|e| e == "db").unwrap_or(false)
+                            {
                                 paths.push(sub_path);
                             } else if sub_path.is_dir() {
                                 if let Ok(db_files) = fs::read_dir(&sub_path) {

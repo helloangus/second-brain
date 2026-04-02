@@ -39,7 +39,7 @@ impl std::fmt::Display for EventType {
 
 impl EventType {
     /// Parse EventType from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn try_from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "meeting" => Some(EventType::Meeting),
             "photo" => Some(EventType::Photo),
@@ -84,6 +84,9 @@ fn default_timezone() -> String {
 #[serde(rename_all = "snake_case")]
 pub struct EventAi {
     pub summary: Option<String>,
+    /// Extended content - longer text that doesn't fit in summary
+    #[serde(default)]
+    pub extended: Option<String>,
     #[serde(default)]
     pub topics: Vec<String>,
     pub sentiment: Option<String>,

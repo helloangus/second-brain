@@ -170,6 +170,8 @@ struct ParsedEventAi {
     #[serde(default)]
     summary: Option<String>,
     #[serde(default)]
+    extended: Option<String>,
+    #[serde(default)]
     topics: Vec<String>,
     #[serde(default)]
     sentiment: Option<String>,
@@ -293,6 +295,7 @@ impl ParsedEventFrontmatter {
                 .ai
                 .map(|a| EventAi {
                     summary: a.summary,
+                    extended: a.extended,
                     topics: a.topics,
                     sentiment: a.sentiment,
                     extraction_version: a.extraction_version,

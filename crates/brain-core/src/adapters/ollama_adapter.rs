@@ -49,7 +49,8 @@ impl OllamaAdapter {
 
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str, body: &impl Serialize) -> Result<T> {
         let url = format!("{}/{}", self.endpoint, path);
-        let body_str = serde_json::to_string(body).map_err(|e| Error::Config(format!("JSON error: {}", e)))?;
+        let body_str =
+            serde_json::to_string(body).map_err(|e| Error::Config(format!("JSON error: {}", e)))?;
 
         let response = ureq::post(&url)
             .set("Content-Type", "application/json")
@@ -60,8 +61,9 @@ impl OllamaAdapter {
             return Err(Error::Http(format!("HTTP error: {}", response.status())));
         }
 
-        let text = response.into_string().map_err(|e| Error::Io(e))?;
-        let result = serde_json::from_str(&text).map_err(|e| Error::Config(format!("Parse error: {}", e)))?;
+        let text = response.into_string().map_err(Error::Io)?;
+        let result = serde_json::from_str(&text)
+            .map_err(|e| Error::Config(format!("Parse error: {}", e)))?;
         Ok(result)
     }
 }
@@ -113,24 +115,26 @@ impl ModelAdapter for OllamaAdapter {
         let prompt = format!(
             r#"Analyze this {} and provide:
 1. A brief summary (2-3 sentences)
-2. Event type (prefer from existing: see below)
-3. Event subtype (prefer from existing: see below)
-4. Key tags (prefer from existing when relevant)
-5. Key topics (prefer from existing when relevant)
-6. Any entities mentioned
+2. Extended content - use this field whenever the content has complexity, multiple points, or details that don't fit in a 2-3 sentence summary. This field has no length limit.
+3. Event type (prefer from existing: see below)
+4. Event subtype (prefer from existing: see below)
+5. Key tags (prefer from existing when relevant)
+6. Key topics (prefer from existing when relevant)
+7. Any entities mentioned
 
 Content:
 {}{}
 
 Respond in JSON format:
 {{
-    "summary": "...",
+    "summary": "2-3 sentence brief summary",
+    "extended": "detailed content - use whenever summary cannot capture all important information, OR null if content is simple enough",
     "type": "prefer from existing event types",
     "subtype": "prefer from existing subtypes",
     "tags": ["prefer existing tags"],
     "topics": ["prefer existing topics"],
     "entities": ["entity1"],
-    "confidence": 0.85
+    "confidence": 0.0-1.0 (how certain you are about the analysis - lower if content is ambiguous or lacks clear signals)
 }}"#,
             input.data_type,
             content.chars().take(2000).collect::<String>(),
@@ -149,6 +153,7 @@ Respond in JSON format:
         let output: AnalysisOutput =
             serde_json::from_str(&response.response).unwrap_or_else(|_| AnalysisOutput {
                 summary: Some(response.response.clone()),
+                extended: None,
                 type_: None,
                 subtype: None,
                 tags: Vec::new(),

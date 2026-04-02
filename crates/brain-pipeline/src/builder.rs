@@ -36,15 +36,16 @@ impl EventBuilder {
 
         // Determine event type from task type, or use AI-provided type
         let event_type = if let Some(ref type_str) = output.type_ {
-            EventType::from_str(type_str).unwrap_or_else(|| {
-                Self::event_type_from_task(task_type)
-            })
+            EventType::try_from_str(type_str).unwrap_or_else(|| Self::event_type_from_task(task_type))
         } else {
             Self::event_type_from_task(task_type)
         };
 
         // Use AI-provided subtype or fall back to task type
-        let subtype = output.subtype.clone().or_else(|| Some(task_type.to_string()));
+        let subtype = output
+            .subtype
+            .clone()
+            .or_else(|| Some(task_type.to_string()));
 
         // Extract filename for summary
         let filename = Path::new(input_path)
@@ -83,6 +84,7 @@ impl EventBuilder {
             derived_refs: DerivedRefs::default(),
             ai: EventAi {
                 summary: Some(summary),
+                extended: output.extended.clone(),
                 topics: output.topics.clone(),
                 sentiment: None,
                 extraction_version: Some(1),
@@ -141,6 +143,7 @@ impl EventBuilder {
             derived_refs: DerivedRefs::default(),
             ai: EventAi {
                 summary: Some(summary.to_string()),
+                extended: None,
                 topics: Vec::new(),
                 sentiment: None,
                 extraction_version: None,

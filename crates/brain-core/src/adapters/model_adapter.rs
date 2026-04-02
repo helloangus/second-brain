@@ -33,6 +33,9 @@ pub struct DictContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
     pub summary: Option<String>,
+    /// Extended content - longer text that doesn't fit in summary
+    #[serde(default)]
+    pub extended: Option<String>,
     /// Event type suggested by AI
     #[serde(default)]
     pub type_: Option<String>,

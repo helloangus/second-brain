@@ -251,14 +251,18 @@ mod tests {
 
     #[test]
     fn test_log_entry_builder() {
-        let entry = LogEntry::new(LogType::Crud, CrudOperation::Create.to_string(), TargetType::Event)
-            .with_target_id("evt-123")
-            .with_duration_ms(45)
-            .with_source(LogSource {
-                device: Some("PC".to_string()),
-                channel: Some("CLI".to_string()),
-                agent: Some("manual_entry".to_string()),
-            });
+        let entry = LogEntry::new(
+            LogType::Crud,
+            CrudOperation::Create.to_string(),
+            TargetType::Event,
+        )
+        .with_target_id("evt-123")
+        .with_duration_ms(45)
+        .with_source(LogSource {
+            device: Some("PC".to_string()),
+            channel: Some("CLI".to_string()),
+            agent: Some("manual_entry".to_string()),
+        });
 
         assert_eq!(entry.log_type, LogType::Crud);
         assert_eq!(entry.operation, "create");

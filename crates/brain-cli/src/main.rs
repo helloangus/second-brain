@@ -169,7 +169,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             type_,
             process,
         } => {
-            commands::ingest::execute(&config, &file, &source, &device, &agent, &type_, process).await?;
+            commands::ingest::execute(&config, &file, &source, &device, &agent, &type_, process)
+                .await?;
         }
         Commands::Process { limit } => {
             commands::process::execute(&config, limit)?;
@@ -182,7 +183,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             stats,
             days,
         } => {
-            commands::logs::execute(&config, log_type.as_deref(), target_type.as_deref(), target_id.as_deref(), limit, stats, days)?;
+            commands::logs::execute(
+                &config,
+                log_type.as_deref(),
+                target_type.as_deref(),
+                target_id.as_deref(),
+                limit,
+                stats,
+                days,
+            )?;
         }
         Commands::Entity { command } => match command {
             EntityCommands::List { type_ } => {

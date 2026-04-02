@@ -58,6 +58,7 @@ pub fn execute(
         derived_refs: DerivedRefs::default(),
         ai: EventAi {
             summary: Some(summary.to_string()),
+            extended: None,
             topics: Vec::new(),
             sentiment: None,
             extraction_version: None,
