@@ -36,7 +36,8 @@ impl EventBuilder {
 
         // Determine event type from task type, or use AI-provided type
         let event_type = if let Some(ref type_str) = output.type_ {
-            EventType::try_from_str(type_str).unwrap_or_else(|| Self::event_type_from_task(task_type))
+            EventType::try_from_str(type_str)
+                .unwrap_or_else(|| Self::event_type_from_task(task_type))
         } else {
             Self::event_type_from_task(task_type)
         };

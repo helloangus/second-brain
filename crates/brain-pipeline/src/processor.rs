@@ -186,18 +186,8 @@ pub async fn process_queue(
 fn load_dict_context(dicts_path: &std::path::Path) -> DictContext {
     match DictSet::load(dicts_path) {
         Ok(dicts) => DictContext {
-            event_types: dicts
-                .event_type
-                .keys()
-                .into_iter()
-                .cloned()
-                .collect(),
-            event_subtypes: dicts
-                .event_subtype
-                .keys()
-                .into_iter()
-                .cloned()
-                .collect(),
+            event_types: dicts.event_type.keys().into_iter().cloned().collect(),
+            event_subtypes: dicts.event_subtype.keys().into_iter().cloned().collect(),
             tags: dicts.tags.keys().into_iter().cloned().collect(),
             topics: dicts.topics.keys().into_iter().cloned().collect(),
         },
