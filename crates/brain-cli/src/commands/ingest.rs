@@ -143,6 +143,11 @@ pub async fn execute(
 
     // If --process flag set, run AI processing immediately
     if process {
+        if config.adapters.is_empty() {
+            return Err(
+                "AI adapter not configured. Please configure adapters in config/brain.yaml".into(),
+            );
+        }
         println!("Processing with AI...");
         processor::process_queue(config, None).await?;
     }

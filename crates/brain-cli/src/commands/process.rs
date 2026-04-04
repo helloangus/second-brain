@@ -8,9 +8,16 @@ use std::process::Command;
 /// Processes all pending tasks in the AI pipeline queue.
 /// This invokes the brain-pipeline binary directly to avoid tokio runtime conflicts.
 pub fn execute(
-    _config: &BrainConfig,
+    config: &BrainConfig,
     limit: Option<usize>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Check if AI adapter is configured
+    if config.adapters.is_empty() {
+        return Err(
+            "AI adapter not configured. Please configure adapters in config/brain.yaml".into(),
+        );
+    }
+
     // Find the brain-pipeline binary
     let pipeline_binary = std::env::current_exe()?
         .parent()

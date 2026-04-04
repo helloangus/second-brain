@@ -247,7 +247,7 @@ impl Logger {
     pub fn get_by_type(&self, log_type: LogType, limit: usize) -> Result<Vec<LogEntry>> {
         let mut all_entries = Vec::new();
 
-        for db_path in self.config.all_log_db_paths() {
+        for db_path in self.config.iter_log_db_paths() {
             if let Ok(conn) = Connection::open(&db_path) {
                 let repo = LogRepository::new(&conn);
                 if let Ok(entries) = repo.query_by_type(log_type, limit) {
@@ -272,7 +272,7 @@ impl Logger {
     ) -> Result<Vec<LogEntry>> {
         let mut all_entries = Vec::new();
 
-        for db_path in self.config.all_log_db_paths() {
+        for db_path in self.config.iter_log_db_paths() {
             if let Ok(conn) = Connection::open(&db_path) {
                 let repo = LogRepository::new(&conn);
                 if let Ok(entries) = repo.query_for_target(target_type, target_id, limit) {
@@ -291,7 +291,7 @@ impl Logger {
     pub fn get_recent(&self, limit: usize) -> Result<Vec<LogEntry>> {
         let mut all_entries = Vec::new();
 
-        for db_path in self.config.all_log_db_paths() {
+        for db_path in self.config.iter_log_db_paths() {
             if let Ok(conn) = Connection::open(&db_path) {
                 let repo = LogRepository::new(&conn);
                 if let Ok(entries) = repo.query_recent(limit) {
@@ -315,7 +315,7 @@ impl Logger {
         let mut duration_sum = 0.0;
         let mut count = 0i64;
 
-        for db_path in self.config.all_log_db_paths() {
+        for db_path in self.config.iter_log_db_paths() {
             if let Ok(conn) = Connection::open(&db_path) {
                 let repo = LogRepository::new(&conn);
 
