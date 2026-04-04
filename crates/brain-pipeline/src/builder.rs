@@ -103,10 +103,7 @@ impl EventBuilder {
         match task_type {
             TaskType::ImageCaption | TaskType::FaceDetection | TaskType::Ocr => EventType::Photo,
             TaskType::Asr | TaskType::SpeakerDiarization => EventType::Activity,
-            TaskType::Embedding | TaskType::Reasoning | TaskType::Summarize | TaskType::Tagging => {
-                EventType::Research
-            }
-            _ => EventType::Other,
+            TaskType::Embedding | TaskType::Reasoning | TaskType::Summarize => EventType::Research,
         }
     }
 
