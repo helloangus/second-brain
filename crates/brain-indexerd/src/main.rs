@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize state
     let state = Arc::new(Mutex::new(IndexerState::new(&config)?));
-    info!("Database initialized at {:?}", config.db_path);
+    info!("数据库已初始化于 {:?}", config.db_path);
 
     // Process existing files first
     {
@@ -70,13 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             if let Err(e) = run_watcher(events_path, entities_path, watcher_state).await {
-                error!("Watcher error: {}", e);
+                error!("监视器错误: {}", e);
             }
         });
     });
 
     // Keep the main thread alive
-    info!("Indexer running. Press Ctrl+C to stop.");
+    info!("索引服务运行中。按 Ctrl+C 停止。");
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }
@@ -102,7 +102,7 @@ async fn run_watcher(
     watcher.watch(&entities_path, RecursiveMode::Recursive)?;
 
     info!(
-        "Watching {} and {}",
+        "正在监视 {} 和 {}",
         events_path.display(),
         entities_path.display()
     );
@@ -128,15 +128,15 @@ async fn handle_event(event: &Event, state: &Arc<Mutex<IndexerState>>) {
 
         match event.kind {
             EventKind::Create(_) | EventKind::Modify(_) => {
-                info!("Processing: {:?}", path);
+                info!("正在处理: {:?}", path);
                 if let Err(e) = processor.process_file(&path) {
-                    error!("Failed to process {:?}: {}", path, e);
+                    error!("处理 {:?} 失败: {}", path, e);
                 }
             }
             EventKind::Remove(_) => {
-                info!("Removing: {:?}", path);
+                info!("正在删除: {:?}", path);
                 if let Err(e) = processor.remove_file(&path) {
-                    error!("Failed to remove {:?}: {}", path, e);
+                    error!("删除 {:?} 失败: {}", path, e);
                 }
             }
             _ => {}

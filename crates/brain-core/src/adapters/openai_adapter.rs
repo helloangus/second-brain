@@ -87,29 +87,29 @@ impl ModelAdapter for OpenAIAdapter {
 
         // === STEP 1: Free analysis (no dictionary constraints) ===
         let step1_prompt = format!(
-            r#"Analyze this {} and provide:
-1. A brief summary (2-3 sentences)
-2. Extended content - use this field whenever the content has complexity, multiple points, or details that don't fit in a 2-3 sentence summary. This field has no length limit.
-3. Event type (choose freely based on content meaning)
-4. Event subtype (choose freely based on content meaning)
-5. Key tags (create new ones if needed - be creative and specific)
-6. Key topics (create new ones if needed - be creative and specific)
-7. Any entities mentioned
+            r#"分析这个{}并提供:
+1. 简短摘要（2-3句话）
+2. 扩展内容 - 当内容复杂、有多个要点或细节无法用2-3句话概括时使用此字段。此字段没有长度限制。
+3. 事件类型（根据内容含义自由选择）
+4. 事件子类型（根据内容含义自由选择）
+5. 关键标签（需要时创建新的 - 要有创意且具体）
+6. 关键主题（需要时创建新的 - 要有创意且具体）
+7. 提到的任何实体
 
-IMPORTANT: Choose type, subtype, tags, and topics based SOLELY on what best describes the content. Do NOT try to match existing values. Create new values if nothing existing fits perfectly.
+重要：完全根据内容选择最描述性的类型、子类型、标签和主题。不要试图匹配现有值。如果没有完全合适的就创建新值。
 
-Content:
+内容:
 {}
 
-Respond in JSON format:
+请以JSON格式回复:
 {{
-    "summary": "2-3 sentence brief summary",
-    "extended": "detailed content OR null if content is simple",
-    "type": "freely chosen event type",
-    "subtype": "freely chosen subtype",
-    "tags": ["tag1", "tag2"],
-    "topics": ["topic1", "topic2"],
-    "entities": ["entity1"],
+    "summary": "2-3句话的简短摘要",
+    "extended": "详细内容，如果没有合适内容则填null",
+    "type": "自由选择的事件类型",
+    "subtype": "自由选择的子类型",
+    "tags": ["标签1", "标签2"],
+    "topics": ["主题1", "主题2"],
+    "entities": ["实体1"],
     "confidence": 0.0-1.0
 }}"#,
             input.data_type, truncated_content
@@ -158,38 +158,38 @@ Respond in JSON format:
         };
 
         let step2_prompt = format!(
-            r#"Review your initial analysis and align with existing dictionary where possible.
+            r#"回顾你的初步分析，并与现有字典进行对齐（如果适用）。
 
-INITIAL ANALYSIS:
+初步分析:
 {}
 
-EXISTING DICTIONARY:
+现有字典:
 {}
 
-TASK:
-For each field (type, subtype, tags, topics):
-- If initial value matches an existing dictionary entry -> USE the existing entry (with exact key)
-- If initial value is NEW (not in dictionary) -> KEEP it as NEW and it will be added to the dictionary
+任务:
+对于每个字段（类型、子类型、标签、主题）:
+- 如果初步值匹配现有字典条目 → 使用现有条目（使用精确的key）
+- 如果初步值是新的（不在字典中）→ 保留它作为新值，它将被添加到字典中
 
-IMPORTANT: Prefer existing dictionary values when they fit well. But don't force a match if the initial value is genuinely different or more accurate.
+重要：当现有字典值合适时优先使用。但不要强制匹配，如果初步值确实不同或更准确的话。
 
-Respond in JSON format:
+请以JSON格式回复:
 {{
     "final": {{
-        "summary": "brief summary",
-        "extended": "detailed content OR null",
-        "type": "existing or new event type",
-        "subtype": "existing or new subtype",
-        "tags": ["tag1", "tag2"],
-        "topics": ["topic1", "topic2"],
-        "entities": ["entity1"],
+        "summary": "简短摘要",
+        "extended": "详细内容或null",
+        "type": "现有或新的事件类型",
+        "subtype": "现有或新的子类型",
+        "tags": ["标签1", "标签2"],
+        "topics": ["主题1", "主题2"],
+        "entities": ["实体1"],
         "confidence": 0.0-1.0
     }},
     "new_entries": {{
-        "event_types": [{{"key": "new_type", "zh": null, "description": null}}],
+        "event_types": [{{"key": "新类型", "zh": null, "description": null}}],
         "event_subtypes": [],
-        "tags": [{{"key": "new_tag", "zh": null, "description": null}}],
-        "topics": [{{"key": "new_topic", "zh": null, "description": null}}]
+        "tags": [{{"key": "新标签", "zh": null, "description": null}}],
+        "topics": [{{"key": "新主题", "zh": null, "description": null}}]
     }}
 }}"#,
             serde_json::to_string(&step1).unwrap_or_default(),
@@ -262,7 +262,7 @@ Respond in JSON format:
             model: self.model.clone(),
             messages: vec![Message {
                 role: "user".to_string(),
-                content: format!("Summarize the following text in 2-3 sentences:\n\n{}", text),
+                content: format!("用2-3句话总结以下文本:\n\n{}", text),
             }],
             temperature: 0.7,
         };
@@ -338,7 +338,7 @@ impl OpenAIAdapter {
                 })
                 .collect();
             if !entries.is_empty() {
-                parts.push(format!("Event Types:\n{}", entries.join("\n")));
+                parts.push(format!("事件类型:\n{}", entries.join("\n")));
             }
 
             // Event Subtypes
@@ -361,7 +361,7 @@ impl OpenAIAdapter {
                 })
                 .collect();
             if !entries.is_empty() {
-                parts.push(format!("Event Subtypes:\n{}", entries.join("\n")));
+                parts.push(format!("事件子类型:\n{}", entries.join("\n")));
             }
 
             // Tags
@@ -384,7 +384,7 @@ impl OpenAIAdapter {
                 })
                 .collect();
             if !entries.is_empty() {
-                parts.push(format!("Tags:\n{}", entries.join("\n")));
+                parts.push(format!("标签:\n{}", entries.join("\n")));
             }
 
             // Topics
@@ -407,7 +407,7 @@ impl OpenAIAdapter {
                 })
                 .collect();
             if !entries.is_empty() {
-                parts.push(format!("Topics:\n{}", entries.join("\n")));
+                parts.push(format!("主题:\n{}", entries.join("\n")));
             }
         } else {
             // Fallback: use the old Vec<String> fields
@@ -429,7 +429,7 @@ impl OpenAIAdapter {
         }
 
         if parts.is_empty() {
-            "No existing dictionary entries.".to_string()
+            "暂无现有字典条目。".to_string()
         } else {
             parts.join("\n\n")
         }

@@ -33,7 +33,7 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
     let events = repo.find_by_time_range(start_dt, end_dt)?;
 
     if events.is_empty() {
-        println!("No events this month.");
+        println!("本月无事件。");
         return Ok(());
     }
 
@@ -53,14 +53,14 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
 
         for event in day_events {
             let time = event.time.start.format("%H:%M");
-            let type_str = event.type_.to_string();
-            let summary = event.ai.summary.as_deref().unwrap_or("(no summary)");
+            let type_str = event.type_.display_zh();
+            let summary = event.ai.summary.as_deref().unwrap_or("(无摘要)");
             println!("  {} [{}] {}", time, type_str, summary);
         }
     }
 
     println!();
-    println!("Total: {} event(s)", events.len());
+    println!("共 {} 个事件", events.len());
 
     Ok(())
 }

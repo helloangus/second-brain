@@ -74,11 +74,11 @@ pub async fn process_queue(
     }
 
     if tasks.is_empty() {
-        println!("No pending tasks.");
+        println!("无待处理任务。");
         return Ok(());
     }
 
-    println!("Processing {} task(s)...", tasks.len());
+    println!("正在处理 {} 个任务...", tasks.len());
 
     // Get adapter configuration
     let adapter_config =
@@ -147,7 +147,7 @@ pub async fn process_queue(
                 if fs::rename(&processing_path, &done_path).is_ok() {
                     processed += 1;
                     println!(
-                        "  Task {} completed in {:.2}s",
+                        "  任务 {} 完成，耗时 {:.2}秒",
                         task_id,
                         elapsed.as_secs_f64()
                     );
@@ -172,12 +172,12 @@ pub async fn process_queue(
         0.0
     };
     println!(
-        "Processed: {} ({:.2}s total, {:.2}s avg)",
+        "已处理: {} ({:.2}秒总计, {:.2}秒平均)",
         processed,
         total_duration.as_secs_f64(),
         avg_time
     );
-    println!("Failed: {}", failed);
+    println!("失败: {}", failed);
 
     Ok(())
 }
@@ -256,7 +256,7 @@ fn process_task_sync(
                     None,
                 );
                 println!(
-                    "  AI analysis: {:.2}s ({})",
+                    "  AI分析: {:.2}秒 ({})",
                     ai_elapsed.as_secs_f64(),
                     data_type_str
                 );

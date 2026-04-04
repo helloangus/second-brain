@@ -205,6 +205,53 @@ impl DictSet {
         Ok(())
     }
 
+    /// Find entry by key OR Chinese translation
+    /// Returns the entry if found by either key or zh translation
+    pub fn find_entry(&self, dict_name: &str, key_or_zh: &str) -> Option<&DictEntry> {
+        let dict = match dict_name {
+            "device" => &self.device,
+            "channel" => &self.channel,
+            "capture_agent" => &self.capture_agent,
+            "event_type" => &self.event_type,
+            "event_subtype" => &self.event_subtype,
+            "tags" => &self.tags,
+            "topics" => &self.topics,
+            _ => return None,
+        };
+
+        // Try direct key match first
+        if let Some(entry) = dict.lookup(key_or_zh) {
+            return Some(entry);
+        }
+
+        // Try Chinese translation match
+        for entry in dict.list() {
+            if let Some(zh) = &entry.zh {
+                if zh == key_or_zh {
+                    return Some(entry);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get Chinese display string for a key
+    /// Returns the zh field if present, otherwise falls back to the key itself
+    pub fn get_zh(&self, dict_name: &str, key: &str) -> Option<&str> {
+        let dict = match dict_name {
+            "device" => &self.device,
+            "channel" => &self.channel,
+            "capture_agent" => &self.capture_agent,
+            "event_type" => &self.event_type,
+            "event_subtype" => &self.event_subtype,
+            "tags" => &self.tags,
+            "topics" => &self.topics,
+            _ => return None,
+        };
+        let entry = dict.lookup(key)?;
+        entry.zh.as_deref().or(Some(&entry.key))
+    }
+
     /// Create default dictionaries with common values
     pub fn default_dicts() -> Self {
         let mut device = Dict::default();

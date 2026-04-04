@@ -39,11 +39,11 @@ impl<'a> EventProcessor<'a> {
         if let Some(id) = self.extract_id(path) {
             if self.is_event_file(path) {
                 let repo = EventRepository::new(&conn);
-                info!("Removing event: {}", id);
+                info!("正在删除事件: {}", id);
                 repo.delete(&id)?;
             } else if self.is_entity_file(path) {
                 let repo = EntityRepository::new(&conn);
-                info!("Removing entity: {}", id);
+                info!("正在删除实体: {}", id);
                 repo.delete(&id)?;
             }
         }
@@ -56,10 +56,10 @@ impl<'a> EventProcessor<'a> {
             Ok(event) => {
                 let repo = EventRepository::new(conn);
                 repo.upsert(&event)?;
-                info!("Indexed event: {}", event.id);
+                info!("已索引事件: {}", event.id);
             }
             Err(e) => {
-                warn!("Failed to parse event file: {}", e);
+                warn!("解析事件文件失败: {}", e);
             }
         }
         Ok(())
@@ -70,10 +70,10 @@ impl<'a> EventProcessor<'a> {
             Ok(entity) => {
                 let repo = EntityRepository::new(conn);
                 repo.upsert(&entity)?;
-                info!("Indexed entity: {}", entity.id);
+                info!("已索引实体: {}", entity.id);
             }
             Err(e) => {
-                warn!("Failed to parse entity file: {}", e);
+                warn!("解析实体文件失败: {}", e);
             }
         }
         Ok(())
@@ -115,15 +115,15 @@ pub fn index_existing_files(
                         Ok(event) => {
                             let repo = EventRepository::new(&conn);
                             if let Err(e) = repo.upsert(&event) {
-                                error!("Failed to index event {}: {}", event.id, e);
+                                error!("索引事件 {} 失败: {}", event.id, e);
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to parse {}: {}", path.display(), e);
+                            warn!("解析 {} 失败: {}", path.display(), e);
                         }
                     },
                     Err(e) => {
-                        error!("Failed to read {}: {}", path.display(), e);
+                        error!("读取 {} 失败: {}", path.display(), e);
                     }
                 }
             }
@@ -143,15 +143,15 @@ pub fn index_existing_files(
                         Ok(entity) => {
                             let repo = EntityRepository::new(&conn);
                             if let Err(e) = repo.upsert(&entity) {
-                                error!("Failed to index entity {}: {}", entity.id, e);
+                                error!("索引实体 {} 失败: {}", entity.id, e);
                             }
                         }
                         Err(e) => {
-                            warn!("Failed to parse {}: {}", path.display(), e);
+                            warn!("解析 {} 失败: {}", path.display(), e);
                         }
                     },
                     Err(e) => {
-                        error!("Failed to read {}: {}", path.display(), e);
+                        error!("读取 {} 失败: {}", path.display(), e);
                     }
                 }
             }

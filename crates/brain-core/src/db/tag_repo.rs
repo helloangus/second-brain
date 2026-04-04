@@ -1,6 +1,7 @@
 //! Tag repository
 
 use crate::error::Error;
+use crate::DictSet;
 use rusqlite::{params, Connection};
 
 pub struct TagRepository<'a> {
@@ -44,8 +45,26 @@ impl<'a> TagRepository<'a> {
         Ok(tags)
     }
 
-    /// Search events by tag
-    pub fn find_by_tag(&self, tag: &str) -> Result<Vec<String>, Error> {
+    /// Search events by tag (supports both English key and Chinese translation)
+    /// If dict_set is provided, will also try to match Chinese translation
+    pub fn find_by_tag(&self, tag: &str, dict_set: Option<&DictSet>) -> Result<Vec<String>, Error> {
+        // First try direct match (English key)
+        let mut event_ids = self.find_by_tag_direct(tag)?;
+
+        // If no direct match and dict_set provided, try Chinese match
+        if event_ids.is_empty() {
+            if let Some(dict) = dict_set {
+                if let Some(entry) = dict.find_entry("tags", tag) {
+                    event_ids = self.find_by_tag_direct(&entry.key)?;
+                }
+            }
+        }
+
+        Ok(event_ids)
+    }
+
+    /// Internal: find events by tag directly
+    fn find_by_tag_direct(&self, tag: &str) -> Result<Vec<String>, Error> {
         let mut stmt = self
             .conn
             .prepare("SELECT event_id FROM tags WHERE tag = ?1")?;

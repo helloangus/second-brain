@@ -26,6 +26,19 @@ impl std::fmt::Display for RawDataType {
     }
 }
 
+impl RawDataType {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            RawDataType::Image => "图片",
+            RawDataType::Audio => "音频",
+            RawDataType::Video => "视频",
+            RawDataType::Text => "文本",
+            RawDataType::Document => "文档",
+        }
+    }
+}
+
 /// Reference to raw data file
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawDataRef {

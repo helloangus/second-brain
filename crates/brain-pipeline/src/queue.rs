@@ -45,7 +45,7 @@ pub async fn add_task(
     fs::write(&task_path, content)?;
 
     info!("Added task {} to queue", task_id);
-    println!("Task {} added: {} -> {}", task_id, task_type, input_path);
+    println!("任务 {} 已添加: {} -> {}", task_id, task_type, input_path);
 
     Ok(task_id)
 }
@@ -56,11 +56,11 @@ pub fn show_status(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error
     let processing = count_files(&config.pipeline_queue_path.join("processing"))?;
     let done = count_files(&config.pipeline_queue_path.join("done"))?;
 
-    println!("Pipeline Queue Status");
+    println!("流水线队列状态");
     println!("{}", "=".repeat(50));
-    println!("Pending:    {}", pending);
-    println!("Processing: {}", processing);
-    println!("Done:       {}", done);
+    println!("待处理:    {}", pending);
+    println!("处理中: {}", processing);
+    println!("已完成:       {}", done);
 
     Ok(())
 }

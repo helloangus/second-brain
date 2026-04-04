@@ -37,7 +37,7 @@ pub fn list(
     };
 
     if entities.is_empty() {
-        println!("No entities found.");
+        println!("未找到实体。");
         return Ok(());
     }
 
@@ -45,7 +45,7 @@ pub fn list(
     let mut by_type: std::collections::BTreeMap<String, Vec<_>> = std::collections::BTreeMap::new();
 
     for entity in &entities {
-        let type_str = entity.type_.to_string();
+        let type_str = entity.type_.display_zh().to_string();
         by_type.entry(type_str).or_default().push(entity);
     }
 
@@ -57,15 +57,15 @@ pub fn list(
         for entity in type_entities {
             let status = match entity.status {
                 brain_core::EntityStatus::Active => "",
-                brain_core::EntityStatus::Archived => " [archived]",
-                brain_core::EntityStatus::Merged => " [merged]",
+                brain_core::EntityStatus::Archived => " [已归档]",
+                brain_core::EntityStatus::Merged => " [已合并]",
             };
             println!("  {} - {}{}", entity.id, entity.label, status);
         }
     }
 
     println!();
-    println!("Total: {} entity/entities", entities.len());
+    println!("共 {} 个实体", entities.len());
 
     Ok(())
 }
@@ -81,48 +81,48 @@ pub fn show(config: &BrainConfig, id: &str) -> Result<(), Box<dyn std::error::Er
         Some(entity) => {
             println!("Entity: {}", entity.id);
             println!("{}", "=".repeat(50));
-            println!("Type: {}", entity.type_);
-            println!("Label: {}", entity.label);
+            println!("类型: {}", entity.type_.display_zh());
+            println!("标签: {}", entity.label);
 
             if !entity.aliases.is_empty() {
-                println!("Aliases: {}", entity.aliases.join(", "));
+                println!("别名: {}", entity.aliases.join(", "));
             }
 
             let status = match entity.status {
-                brain_core::EntityStatus::Active => "active",
-                brain_core::EntityStatus::Archived => "archived",
-                brain_core::EntityStatus::Merged => "merged",
+                brain_core::EntityStatus::Active => "活跃",
+                brain_core::EntityStatus::Archived => "已归档",
+                brain_core::EntityStatus::Merged => "已合并",
             };
-            println!("Status: {}", status);
-            println!("Confidence: {}", entity.confidence);
+            println!("状态: {}", status);
+            println!("置信度: {:.2}", entity.confidence);
 
             if let Some(ref domain) = entity.classification.domain {
-                println!("Domain: {}", domain);
+                println!("领域: {}", domain);
             }
 
             if !entity.classification.parent.is_empty() {
-                println!("Parent: {}", entity.classification.parent.join(", "));
+                println!("父级: {}", entity.classification.parent.join(", "));
             }
 
             if let Some(ref desc) = entity.identity.description {
-                println!("Description: {}", desc);
+                println!("描述: {}", desc);
             }
 
             if let Some(ref summary) = entity.identity.summary {
-                println!("Summary: {}", summary);
+                println!("摘要: {}", summary);
             }
 
-            println!("Metrics:");
-            println!("  Event count: {}", entity.metrics.event_count);
+            println!("指标:");
+            println!("  事件数量: {}", entity.metrics.event_count);
             if let Some(ref last_seen) = entity.metrics.last_seen {
-                println!("  Last seen: {}", last_seen.format("%Y-%m-%d %H:%M"));
+                println!("  最近出现: {}", last_seen.format("%Y-%m-%d %H:%M"));
             }
             if let Some(ref score) = entity.metrics.activity_score {
-                println!("  Activity score: {}", score);
+                println!("  活跃度: {:.2}", score);
             }
         }
         None => {
-            println!("Entity not found: {}", id);
+            println!("未找到实体: {}", id);
         }
     }
 

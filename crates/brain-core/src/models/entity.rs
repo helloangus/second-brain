@@ -153,6 +153,28 @@ fn default_schema_version() -> i32 {
     1
 }
 
+impl EntityType {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            EntityType::Person => "人物",
+            EntityType::Organization => "组织",
+            EntityType::Project => "项目",
+            EntityType::Artifact => "产物",
+            EntityType::Concept => "概念",
+            EntityType::Topic => "主题",
+            EntityType::Activity => "活动",
+            EntityType::Goal => "目标",
+            EntityType::Skill => "技能",
+            EntityType::Place => "地点",
+            EntityType::Device => "设备",
+            EntityType::Resource => "资源",
+            EntityType::MemoryCluster => "记忆簇",
+            EntityType::State => "状态",
+        }
+    }
+}
+
 impl Entity {
     /// Generate entity ID based on type
     pub fn generate_id(entity_type: &EntityType, slug: &str) -> String {

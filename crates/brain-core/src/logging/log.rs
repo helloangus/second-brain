@@ -28,6 +28,19 @@ impl std::fmt::Display for LogLevel {
     }
 }
 
+impl LogLevel {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            LogLevel::Trace => "追踪",
+            LogLevel::Debug => "调试",
+            LogLevel::Info => "信息",
+            LogLevel::Warn => "警告",
+            LogLevel::Error => "错误",
+        }
+    }
+}
+
 /// Categories of logs
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -65,6 +78,22 @@ impl std::fmt::Display for LogType {
     }
 }
 
+impl LogType {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            LogType::Crud => "增删改查",
+            LogType::AiProcessing => "AI处理",
+            LogType::Pipeline => "流水线",
+            LogType::System => "系统",
+            LogType::Tag => "标签",
+            LogType::Cognition => "认知",
+            LogType::Evaluation => "评估",
+            LogType::Custom => "自定义",
+        }
+    }
+}
+
 /// CRUD operations
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +119,20 @@ impl std::fmt::Display for CrudOperation {
     }
 }
 
+impl CrudOperation {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            CrudOperation::Create => "创建",
+            CrudOperation::Read => "读取",
+            CrudOperation::Update => "更新",
+            CrudOperation::Delete => "删除",
+            CrudOperation::Search => "搜索",
+            CrudOperation::List => "列表",
+        }
+    }
+}
+
 /// Target entity types for logging
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -111,6 +154,20 @@ impl std::fmt::Display for TargetType {
             TargetType::PipelineTask => write!(f, "pipeline_task"),
             TargetType::Config => write!(f, "config"),
             TargetType::System => write!(f, "system"),
+        }
+    }
+}
+
+impl TargetType {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            TargetType::Event => "事件",
+            TargetType::Entity => "实体",
+            TargetType::Tag => "标签",
+            TargetType::PipelineTask => "任务",
+            TargetType::Config => "配置",
+            TargetType::System => "系统",
         }
     }
 }

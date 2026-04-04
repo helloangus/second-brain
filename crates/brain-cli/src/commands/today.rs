@@ -18,14 +18,14 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     let events = repo.find_by_time_range(today_start, today_end)?;
 
     if events.is_empty() {
-        println!("No events today.");
+        println!("今天没有事件。");
         return Ok(());
     }
 
     for event in &events {
         let time = event.time.start.format("%H:%M");
         let end_time = event.time.end.map(|e| e.format("%H:%M").to_string());
-        let type_str = event.type_.to_string();
+        let type_str = event.type_.display_zh();
 
         println!();
         print!("[{}", time);
@@ -39,12 +39,12 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if !event.tags.is_empty() {
-            println!("  Tags: {}", event.tags.join(", "));
+            println!("  标签: {}", event.tags.join(", "));
         }
     }
 
     println!();
-    println!("Total: {} event(s)", events.len());
+    println!("共 {} 个事件", events.len());
 
     Ok(())
 }

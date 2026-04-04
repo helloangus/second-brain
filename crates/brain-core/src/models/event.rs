@@ -38,6 +38,22 @@ impl std::fmt::Display for EventType {
 }
 
 impl EventType {
+    /// Get Chinese display name
+    pub fn display_zh(&self) -> &'static str {
+        match self {
+            EventType::Meeting => "会议",
+            EventType::Photo => "照片",
+            EventType::Note => "笔记",
+            EventType::Activity => "活动",
+            EventType::Research => "研究",
+            EventType::Reading => "阅读",
+            EventType::Exercise => "锻炼",
+            EventType::Meal => "用餐",
+            EventType::Work => "工作",
+            EventType::Other => "其他",
+        }
+    }
+
     /// Parse EventType from string
     pub fn try_from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {

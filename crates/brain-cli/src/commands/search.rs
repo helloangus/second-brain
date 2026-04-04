@@ -13,7 +13,7 @@ pub fn execute(config: &BrainConfig, keyword: &str) -> Result<(), Box<dyn std::e
     let events = repo.search(keyword)?;
 
     if events.is_empty() {
-        println!("No events found.");
+        println!("未找到事件。");
         return Ok(());
     }
 
@@ -21,17 +21,17 @@ pub fn execute(config: &BrainConfig, keyword: &str) -> Result<(), Box<dyn std::e
         let time = event.time.start.format("%Y-%m-%d %H:%M");
         println!();
         println!("[{}] {}", time, event.id);
-        println!("  Type: {}", event.type_);
+        println!("  类型: {}", event.type_.display_zh());
         if let Some(ref summary) = event.ai.summary {
-            println!("  Summary: {}", summary);
+            println!("  摘要: {}", summary);
         }
         if !event.tags.is_empty() {
-            println!("  Tags: {}", event.tags.join(", "));
+            println!("  标签: {}", event.tags.join(", "));
         }
     }
 
     println!();
-    println!("Found {} event(s)", events.len());
+    println!("找到 {} 个事件", events.len());
 
     Ok(())
 }
