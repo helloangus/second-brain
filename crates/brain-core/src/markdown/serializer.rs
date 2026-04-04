@@ -149,90 +149,35 @@ impl EventSerializer {
     }
 
     fn serialize_entities(&self, entities: &EventEntities, yaml: &mut String) {
-        if !entities.people.is_empty() {
-            yaml.push_str("  people:\n");
-            for e in &entities.people {
-                yaml.push_str(&format!("    - {}\n", e));
+        for (entity_type, ids) in &entities.0 {
+            if ids.is_empty() {
+                continue;
+            }
+            let key = pluralize(entity_type);
+            yaml.push_str(&format!("  {}:\n", key));
+            for id in ids {
+                yaml.push_str(&format!("    - {}\n", id));
             }
         }
-        if !entities.organizations.is_empty() {
-            yaml.push_str("  organizations:\n");
-            for e in &entities.organizations {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.projects.is_empty() {
-            yaml.push_str("  projects:\n");
-            for e in &entities.projects {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.artifacts.is_empty() {
-            yaml.push_str("  artifacts:\n");
-            for e in &entities.artifacts {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.concepts.is_empty() {
-            yaml.push_str("  concepts:\n");
-            for e in &entities.concepts {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.topics.is_empty() {
-            yaml.push_str("  topics:\n");
-            for e in &entities.topics {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.activities.is_empty() {
-            yaml.push_str("  activities:\n");
-            for e in &entities.activities {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.goals.is_empty() {
-            yaml.push_str("  goals:\n");
-            for e in &entities.goals {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.skills.is_empty() {
-            yaml.push_str("  skills:\n");
-            for e in &entities.skills {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.places.is_empty() {
-            yaml.push_str("  places:\n");
-            for e in &entities.places {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.devices.is_empty() {
-            yaml.push_str("  devices:\n");
-            for e in &entities.devices {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.resources.is_empty() {
-            yaml.push_str("  resources:\n");
-            for e in &entities.resources {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.memory_clusters.is_empty() {
-            yaml.push_str("  memory_clusters:\n");
-            for e in &entities.memory_clusters {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
-        if !entities.states.is_empty() {
-            yaml.push_str("  states:\n");
-            for e in &entities.states {
-                yaml.push_str(&format!("    - {}\n", e));
-            }
-        }
+    }
+}
+
+fn pluralize(entity_type: &EntityType) -> &'static str {
+    match entity_type {
+        EntityType::Person => "people",
+        EntityType::Organization => "organizations",
+        EntityType::Project => "projects",
+        EntityType::Artifact => "artifacts",
+        EntityType::Concept => "concepts",
+        EntityType::Topic => "topics",
+        EntityType::Activity => "activities",
+        EntityType::Goal => "goals",
+        EntityType::Skill => "skills",
+        EntityType::Place => "places",
+        EntityType::Device => "devices",
+        EntityType::Resource => "resources",
+        EntityType::MemoryCluster => "memory_clusters",
+        EntityType::State => "states",
     }
 }
 
@@ -367,25 +312,6 @@ impl EntitySerializer {
     }
 }
 
-impl EventEntities {
-    fn is_empty(&self) -> bool {
-        self.people.is_empty()
-            && self.organizations.is_empty()
-            && self.projects.is_empty()
-            && self.artifacts.is_empty()
-            && self.concepts.is_empty()
-            && self.topics.is_empty()
-            && self.activities.is_empty()
-            && self.goals.is_empty()
-            && self.skills.is_empty()
-            && self.places.is_empty()
-            && self.devices.is_empty()
-            && self.resources.is_empty()
-            && self.memory_clusters.is_empty()
-            && self.states.is_empty()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,7 +322,7 @@ mod tests {
         let event = Event {
             schema: "event/v1".to_string(),
             id: "evt-20260331-001".to_string(),
-            type_: EventType::Meeting,
+            type_: "meeting".to_string(),
             subtype: Some("research".to_string()),
             time: EventTime {
                 start: Utc.with_ymd_and_hms(2026, 3, 31, 10, 0, 0).unwrap(),

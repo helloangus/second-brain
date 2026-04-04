@@ -2,11 +2,12 @@
 
 use crate::error::Error;
 use crate::models::{
-    DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, GraphHints,
-    RawRefs,
+    DerivedRefs, EntityType, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime,
+    GraphHints, RawRefs,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};
+use std::collections::BTreeMap;
 
 pub struct EventRepository<'a> {
     conn: &'a Connection,
@@ -35,7 +36,7 @@ impl<'a> EventRepository<'a> {
                 time_start,
                 time_end,
                 event.time.timezone,
-                event.type_.to_string(),
+                event.type_.clone(),
                 event.subtype,
                 event.source.device,
                 event.source.channel,
@@ -88,6 +89,10 @@ impl<'a> EventRepository<'a> {
 
     /// Update event-entity associations
     fn update_entities(&self, event: &Event) -> Result<(), Error> {
+        // Disable foreign key checks for this operation since entity IDs from AI
+        // may not yet exist in the entities table
+        self.conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+
         // Delete existing associations
         self.conn.execute(
             "DELETE FROM event_entities WHERE event_id = ?1",
@@ -99,48 +104,14 @@ impl<'a> EventRepository<'a> {
             "INSERT INTO event_entities (event_id, entity_id, entity_type) VALUES (?1, ?2, ?3)",
         )?;
 
-        for person in &event.entities.people {
-            insert_stmt.execute(params![event.id, person, "person"])?;
+        for (entity_type, ids) in &event.entities.0 {
+            for id in ids {
+                insert_stmt.execute(params![event.id, id, entity_type.to_string()])?;
+            }
         }
-        for org in &event.entities.organizations {
-            insert_stmt.execute(params![event.id, org, "organization"])?;
-        }
-        for proj in &event.entities.projects {
-            insert_stmt.execute(params![event.id, proj, "project"])?;
-        }
-        for artifact in &event.entities.artifacts {
-            insert_stmt.execute(params![event.id, artifact, "artifact"])?;
-        }
-        for concept in &event.entities.concepts {
-            insert_stmt.execute(params![event.id, concept, "concept"])?;
-        }
-        for topic in &event.entities.topics {
-            insert_stmt.execute(params![event.id, topic, "topic"])?;
-        }
-        for activity in &event.entities.activities {
-            insert_stmt.execute(params![event.id, activity, "activity"])?;
-        }
-        for goal in &event.entities.goals {
-            insert_stmt.execute(params![event.id, goal, "goal"])?;
-        }
-        for skill in &event.entities.skills {
-            insert_stmt.execute(params![event.id, skill, "skill"])?;
-        }
-        for place in &event.entities.places {
-            insert_stmt.execute(params![event.id, place, "place"])?;
-        }
-        for device in &event.entities.devices {
-            insert_stmt.execute(params![event.id, device, "device"])?;
-        }
-        for resource in &event.entities.resources {
-            insert_stmt.execute(params![event.id, resource, "resource"])?;
-        }
-        for memory in &event.entities.memory_clusters {
-            insert_stmt.execute(params![event.id, memory, "memory_cluster"])?;
-        }
-        for state in &event.entities.states {
-            insert_stmt.execute(params![event.id, state, "state"])?;
-        }
+
+        // Re-enable foreign key checks
+        self.conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 
         Ok(())
     }
@@ -195,7 +166,9 @@ impl<'a> EventRepository<'a> {
         let mut rows = stmt.query(params![id])?;
 
         if let Some(row) = rows.next()? {
-            Ok(Some(self.row_to_event(row)?))
+            let event_id: String = row.get(0)?;
+            let entities = self.find_entities_by_event_id(&event_id)?;
+            Ok(Some(self.row_to_event(row, entities)?))
         } else {
             Ok(None)
         }
@@ -218,7 +191,9 @@ impl<'a> EventRepository<'a> {
         let mut events = Vec::new();
 
         while let Some(row) = rows.next()? {
-            events.push(self.row_to_event(row)?);
+            let event_id: String = row.get(0)?;
+            let entities = self.find_entities_by_event_id(&event_id)?;
+            events.push(self.row_to_event(row, entities)?);
         }
 
         Ok(events)
@@ -242,7 +217,9 @@ impl<'a> EventRepository<'a> {
         let mut events = Vec::new();
 
         while let Some(row) = rows.next()? {
-            events.push(self.row_to_event(row)?);
+            let event_id: String = row.get(0)?;
+            let entities = self.find_entities_by_event_id(&event_id)?;
+            events.push(self.row_to_event(row, entities)?);
         }
 
         Ok(events)
@@ -261,30 +238,19 @@ impl<'a> EventRepository<'a> {
         let mut events = Vec::new();
 
         while let Some(row) = rows.next()? {
-            events.push(self.row_to_event(row)?);
+            let event_id: String = row.get(0)?;
+            let entities = self.find_entities_by_event_id(&event_id)?;
+            events.push(self.row_to_event(row, entities)?);
         }
 
         Ok(events)
     }
 
-    fn row_to_event(&self, row: &Row) -> Result<Event, Error> {
+    fn row_to_event(&self, row: &Row, entities: EventEntities) -> Result<Event, Error> {
         let time_start_ts: i64 = row.get(2)?;
         let time_end_ts: Option<i64> = row.get(3)?;
         let timezone: String = row.get(4)?;
-        let type_str: String = row.get(5)?;
-
-        let event_type = match type_str.as_str() {
-            "meeting" => crate::models::EventType::Meeting,
-            "photo" => crate::models::EventType::Photo,
-            "note" => crate::models::EventType::Note,
-            "activity" => crate::models::EventType::Activity,
-            "research" => crate::models::EventType::Research,
-            "reading" => crate::models::EventType::Reading,
-            "exercise" => crate::models::EventType::Exercise,
-            "meal" => crate::models::EventType::Meal,
-            "work" => crate::models::EventType::Work,
-            _ => crate::models::EventType::Other,
-        };
+        let type_: String = row.get(5)?;
 
         let ai_topics_str: Option<String> = row.get(12)?;
         let ai_topics: Vec<String> = ai_topics_str
@@ -294,7 +260,7 @@ impl<'a> EventRepository<'a> {
         Ok(Event {
             schema: "event/v1".to_string(),
             id: row.get(0)?,
-            type_: event_type,
+            type_,
             subtype: row.get(6)?,
             time: EventTime {
                 start: DateTime::from_timestamp(time_start_ts, 0).unwrap_or_else(Utc::now),
@@ -313,7 +279,7 @@ impl<'a> EventRepository<'a> {
                 capture_agent: row.get(9)?,
             },
             confidence: row.get(10)?,
-            entities: EventEntities::default(),
+            entities,
             tags: Vec::new(),
             raw_refs: RawRefs::default(),
             derived_refs: DerivedRefs::default(),
@@ -331,5 +297,40 @@ impl<'a> EventRepository<'a> {
             },
             schema_version: row.get(1)?,
         })
+    }
+
+    /// Load entities for an event
+    pub fn find_entities_by_event_id(&self, event_id: &str) -> Result<EventEntities, Error> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT entity_id, entity_type FROM event_entities WHERE event_id = ?1")?;
+
+        let mut map: BTreeMap<EntityType, Vec<String>> = BTreeMap::new();
+        let mut rows = stmt.query(params![event_id])?;
+
+        while let Some(row) = rows.next()? {
+            let entity_id: String = row.get(0)?;
+            let entity_type_str: String = row.get(1)?;
+            let entity_type = match entity_type_str.as_str() {
+                "person" => EntityType::Person,
+                "organization" => EntityType::Organization,
+                "project" => EntityType::Project,
+                "artifact" => EntityType::Artifact,
+                "concept" => EntityType::Concept,
+                "topic" => EntityType::Topic,
+                "activity" => EntityType::Activity,
+                "goal" => EntityType::Goal,
+                "skill" => EntityType::Skill,
+                "place" => EntityType::Place,
+                "device" => EntityType::Device,
+                "resource" => EntityType::Resource,
+                "memory_cluster" => EntityType::MemoryCluster,
+                "state" => EntityType::State,
+                _ => continue,
+            };
+            map.entry(entity_type).or_default().push(entity_id);
+        }
+
+        Ok(EventEntities(map))
     }
 }

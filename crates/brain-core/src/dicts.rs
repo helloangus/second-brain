@@ -451,40 +451,47 @@ impl DictSet {
         );
 
         let mut event_type = Dict::default();
+        // Event type categories based on "time-anchored cognitive fact" principle:
+        // describes WHAT KIND OF COGNITIVE OCCURRENCE happened
         event_type.add(
-            DictEntry::new("note")
-                .with_zh("笔记")
-                .with_description("文字笔记记录"),
-        );
-        event_type.add(
-            DictEntry::new("task")
-                .with_zh("任务")
-                .with_description("待办或已完成的任务"),
-        );
-        event_type.add(
-            DictEntry::new("idea")
-                .with_zh("想法")
-                .with_description("灵感或想法"),
-        );
-        event_type.add(
-            DictEntry::new("meeting")
-                .with_zh("会议")
-                .with_description("会议记录"),
+            DictEntry::new("observation")
+                .with_zh("观察")
+                .with_description("看到、注意到、感知到某事（拍照、截图、视觉输入）"),
         );
         event_type.add(
             DictEntry::new("communication")
                 .with_zh("沟通")
-                .with_description("沟通记录如消息、邮件"),
+                .with_description("与他人交流（会议、消息、讨论、邮件）"),
         );
         event_type.add(
-            DictEntry::new("media")
-                .with_zh("媒体")
-                .with_description("图片、音频、视频等媒体"),
+            DictEntry::new("learning")
+                .with_zh("学习")
+                .with_description("获取知识（阅读、研究、课程）"),
         );
         event_type.add(
-            DictEntry::new("document")
-                .with_zh("文档")
-                .with_description("文档或文件"),
+            DictEntry::new("creation")
+                .with_zh("创作")
+                .with_description("产生新内容（写作、编程、制图）"),
+        );
+        event_type.add(
+            DictEntry::new("idea")
+                .with_zh("想法")
+                .with_description("思考、反思、灵感、结论"),
+        );
+        event_type.add(
+            DictEntry::new("action")
+                .with_zh("行为")
+                .with_description("执行具体行动（锻炼、用餐、工作、任务）"),
+        );
+        event_type.add(
+            DictEntry::new("transaction")
+                .with_zh("交易")
+                .with_description("交换、获取、失去某物（购买、接收、丢失）"),
+        );
+        event_type.add(
+            DictEntry::new("state_change")
+                .with_zh("状态变化")
+                .with_description("开始、结束、到达、离开、转变"),
         );
 
         let mut event_subtype = Dict::default();
@@ -831,8 +838,8 @@ mod tests {
         assert!(dicts.channel.exists("web"));
 
         // event_type
-        assert!(dicts.event_type.exists("note"));
-        assert!(dicts.event_type.exists("task"));
+        assert!(dicts.event_type.exists("observation"));
+        assert!(dicts.event_type.exists("communication"));
 
         // tags
         assert!(dicts.tags.exists("personal"));
@@ -896,7 +903,7 @@ mod tests {
         // Verify some entries
         assert!(loaded.device.exists("desktop"));
         assert!(loaded.channel.exists("cli"));
-        assert!(loaded.event_type.exists("note"));
+        assert!(loaded.event_type.exists("observation"));
     }
 
     #[test]

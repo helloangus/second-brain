@@ -4,8 +4,8 @@
 //! validates and transforms AI JSON output into proper events.
 
 use brain_core::{
-    DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, EventType,
-    GraphHints, PipelineOutput, RawRefs, TaskType,
+    DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource, EventTime, GraphHints,
+    PipelineOutput, RawRefs, TaskType,
 };
 use chrono::Utc;
 use std::path::Path;
@@ -34,13 +34,11 @@ impl EventBuilder {
         let now = Utc::now();
         let id = Event::generate_id();
 
-        // Determine event type from task type, or use AI-provided type
-        let event_type = if let Some(ref type_str) = output.type_ {
-            EventType::try_from_str(type_str)
-                .unwrap_or_else(|| Self::event_type_from_task(task_type))
-        } else {
-            Self::event_type_from_task(task_type)
-        };
+        // Determine event type from AI output, or fall back based on task type
+        let type_ = output
+            .type_
+            .clone()
+            .unwrap_or_else(|| Self::fallback_type_from_task(task_type));
 
         // Use AI-provided subtype or fall back to task type
         let subtype = output
@@ -62,7 +60,7 @@ impl EventBuilder {
         let event = Event {
             schema: "event/v1".to_string(),
             id,
-            type_: event_type,
+            type_,
             subtype,
             time: EventTime {
                 start: now,
@@ -77,7 +75,7 @@ impl EventBuilder {
                 capture_agent: capture_agent.clone(),
             },
             confidence: output.confidence.unwrap_or(0.75),
-            entities: EventEntities::default(),
+            entities: EventEntities::default(), // AI-extracted entities discarded; create Entity records manually if needed
             tags: output.tags.clone(),
             raw_refs: RawRefs {
                 files: vec![input_path.to_string()],
@@ -98,12 +96,16 @@ impl EventBuilder {
         Ok(event)
     }
 
-    /// Determine event type from task type
-    fn event_type_from_task(task_type: &TaskType) -> EventType {
+    /// Determine fallback event type from task type (when AI doesn't provide one)
+    fn fallback_type_from_task(task_type: &TaskType) -> String {
         match task_type {
-            TaskType::ImageCaption | TaskType::FaceDetection | TaskType::Ocr => EventType::Photo,
-            TaskType::Asr | TaskType::SpeakerDiarization => EventType::Activity,
-            TaskType::Embedding | TaskType::Reasoning | TaskType::Summarize => EventType::Research,
+            TaskType::ImageCaption | TaskType::FaceDetection | TaskType::Ocr => {
+                "observation".to_string()
+            }
+            TaskType::Asr | TaskType::SpeakerDiarization => "communication".to_string(),
+            TaskType::Embedding | TaskType::Reasoning | TaskType::Summarize => {
+                "learning".to_string()
+            }
         }
     }
 
@@ -111,7 +113,7 @@ impl EventBuilder {
     #[allow(dead_code)]
     pub fn _create_simple_event(
         summary: &str,
-        event_type: EventType,
+        type_: String,
         tags: &[String],
     ) -> Result<Event, Box<dyn std::error::Error>> {
         let now = Utc::now();
@@ -120,7 +122,7 @@ impl EventBuilder {
         Ok(Event {
             schema: "event/v1".to_string(),
             id,
-            type_: event_type,
+            type_,
             subtype: None,
             time: EventTime {
                 start: now,

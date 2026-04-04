@@ -1,6 +1,6 @@
 //! Today command
 
-use brain_core::{BrainConfig, Database, EventRepository};
+use brain_core::{BrainConfig, Database, DictSet, EventRepository};
 use chrono::Utc;
 
 pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -11,6 +11,9 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::open(&config.db_path)?;
     let conn = db.connection();
     let repo = EventRepository::new(&conn);
+
+    // Load dictionaries for Chinese display
+    let dicts = DictSet::load(&config.dicts_path).unwrap_or_else(|_| DictSet::default_dicts());
 
     println!("Today's Events: {}", now.format("%Y-%m-%d"));
     println!("{}", "=".repeat(50));
@@ -25,7 +28,7 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     for event in &events {
         let time = event.time.start.format("%H:%M");
         let end_time = event.time.end.map(|e| e.format("%H:%M").to_string());
-        let type_str = event.type_.display_zh();
+        let type_str = event.type_display_zh(&dicts);
 
         println!();
         print!("[{}", time);

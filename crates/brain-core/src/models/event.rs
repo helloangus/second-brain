@@ -2,75 +2,10 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-/// Event type enum
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum EventType {
-    Meeting,
-    Photo,
-    Note,
-    Activity,
-    Research,
-    Reading,
-    Exercise,
-    Meal,
-    Work,
-    #[default]
-    Other,
-}
-
-impl std::fmt::Display for EventType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EventType::Meeting => write!(f, "meeting"),
-            EventType::Photo => write!(f, "photo"),
-            EventType::Note => write!(f, "note"),
-            EventType::Activity => write!(f, "activity"),
-            EventType::Research => write!(f, "research"),
-            EventType::Reading => write!(f, "reading"),
-            EventType::Exercise => write!(f, "exercise"),
-            EventType::Meal => write!(f, "meal"),
-            EventType::Work => write!(f, "work"),
-            EventType::Other => write!(f, "other"),
-        }
-    }
-}
-
-impl EventType {
-    /// Get Chinese display name
-    pub fn display_zh(&self) -> &'static str {
-        match self {
-            EventType::Meeting => "会议",
-            EventType::Photo => "照片",
-            EventType::Note => "笔记",
-            EventType::Activity => "活动",
-            EventType::Research => "研究",
-            EventType::Reading => "阅读",
-            EventType::Exercise => "锻炼",
-            EventType::Meal => "用餐",
-            EventType::Work => "工作",
-            EventType::Other => "其他",
-        }
-    }
-
-    /// Parse EventType from string
-    pub fn try_from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "meeting" => Some(EventType::Meeting),
-            "photo" => Some(EventType::Photo),
-            "note" => Some(EventType::Note),
-            "activity" => Some(EventType::Activity),
-            "research" => Some(EventType::Research),
-            "reading" => Some(EventType::Reading),
-            "exercise" => Some(EventType::Exercise),
-            "meal" => Some(EventType::Meal),
-            "work" => Some(EventType::Work),
-            "other" => Some(EventType::Other),
-            _ => None,
-        }
-    }
-}
+use crate::models::EntityType;
+use crate::DictSet;
 
 /// Source information
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -126,38 +61,42 @@ pub struct GraphHints {
     pub recurrence: bool,
 }
 
-/// Entity references within an event
+/// Entity references within an event, keyed by entity type
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub struct EventEntities {
-    #[serde(default)]
-    pub people: Vec<String>,
-    #[serde(default)]
-    pub organizations: Vec<String>,
-    #[serde(default)]
-    pub projects: Vec<String>,
-    #[serde(default)]
-    pub artifacts: Vec<String>,
-    #[serde(default)]
-    pub concepts: Vec<String>,
-    #[serde(default)]
-    pub topics: Vec<String>,
-    #[serde(default)]
-    pub activities: Vec<String>,
-    #[serde(default)]
-    pub goals: Vec<String>,
-    #[serde(default)]
-    pub skills: Vec<String>,
-    #[serde(default)]
-    pub places: Vec<String>,
-    #[serde(default)]
-    pub devices: Vec<String>,
-    #[serde(default)]
-    pub resources: Vec<String>,
-    #[serde(default)]
-    pub memory_clusters: Vec<String>,
-    #[serde(default)]
-    pub states: Vec<String>,
+pub struct EventEntities(pub(crate) BTreeMap<EntityType, Vec<String>>);
+
+impl EventEntities {
+    /// Create from untyped entity list (e.g., from AI output) - stored under Concept
+    pub fn from_untyped(ids: impl IntoIterator<Item = String>) -> Self {
+        let ids: Vec<String> = ids.into_iter().collect();
+        if ids.is_empty() {
+            Self(BTreeMap::new())
+        } else {
+            let mut map = BTreeMap::new();
+            map.insert(EntityType::Concept, ids);
+            Self(map)
+        }
+    }
+
+    /// Add an entity of the given type
+    pub fn add_entity(&mut self, type_: EntityType, id: impl Into<String>) {
+        self.0.entry(type_).or_default().push(id.into());
+    }
+
+    /// Get all entities of a given type
+    pub fn get(&self, type_: EntityType) -> &[String] {
+        self.0.get(&type_).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
+    /// Get total count of all entities
+    pub fn total_count(&self) -> usize {
+        self.0.values().map(|v| v.len()).sum()
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.0.values().all(|v| v.is_empty())
+    }
 }
 
 /// References to raw data files
@@ -182,7 +121,7 @@ pub struct Event {
     pub schema: String,
     pub id: String,
     #[serde(default)]
-    pub type_: EventType,
+    pub type_: String,
     pub subtype: Option<String>,
     pub time: EventTime,
     pub created_at: Option<DateTime<Utc>>,
@@ -228,6 +167,15 @@ impl Event {
             })
             .collect();
         format!("evt-{}-{}", now.format("%Y%m%d-%H%M%S"), rand_hex)
+    }
+
+    /// Get Chinese display name for event type via dictionary lookup
+    pub fn type_display_zh(&self, dicts: &DictSet) -> String {
+        dicts
+            .event_type
+            .lookup(&self.type_)
+            .map(|e| e.zh.clone().unwrap_or_else(|| self.type_.clone()))
+            .unwrap_or_else(|| self.type_.clone())
     }
 }
 

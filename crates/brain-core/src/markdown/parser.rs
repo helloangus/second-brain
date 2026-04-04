@@ -157,6 +157,56 @@ struct ParsedEventEntities {
     states: Vec<String>,
 }
 
+impl From<ParsedEventEntities> for EventEntities {
+    fn from(parsed: ParsedEventEntities) -> Self {
+        use std::collections::BTreeMap;
+        let mut map = BTreeMap::new();
+        if !parsed.people.is_empty() {
+            map.insert(EntityType::Person, parsed.people);
+        }
+        if !parsed.organizations.is_empty() {
+            map.insert(EntityType::Organization, parsed.organizations);
+        }
+        if !parsed.projects.is_empty() {
+            map.insert(EntityType::Project, parsed.projects);
+        }
+        if !parsed.artifacts.is_empty() {
+            map.insert(EntityType::Artifact, parsed.artifacts);
+        }
+        if !parsed.concepts.is_empty() {
+            map.insert(EntityType::Concept, parsed.concepts);
+        }
+        if !parsed.topics.is_empty() {
+            map.insert(EntityType::Topic, parsed.topics);
+        }
+        if !parsed.activities.is_empty() {
+            map.insert(EntityType::Activity, parsed.activities);
+        }
+        if !parsed.goals.is_empty() {
+            map.insert(EntityType::Goal, parsed.goals);
+        }
+        if !parsed.skills.is_empty() {
+            map.insert(EntityType::Skill, parsed.skills);
+        }
+        if !parsed.places.is_empty() {
+            map.insert(EntityType::Place, parsed.places);
+        }
+        if !parsed.devices.is_empty() {
+            map.insert(EntityType::Device, parsed.devices);
+        }
+        if !parsed.resources.is_empty() {
+            map.insert(EntityType::Resource, parsed.resources);
+        }
+        if !parsed.memory_clusters.is_empty() {
+            map.insert(EntityType::MemoryCluster, parsed.memory_clusters);
+        }
+        if !parsed.states.is_empty() {
+            map.insert(EntityType::State, parsed.states);
+        }
+        EventEntities(map)
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 struct ParsedDerivedRefs {
     #[serde(default)]
@@ -205,40 +255,14 @@ impl ParsedEventFrontmatter {
                 .ok()
         });
 
-        let event_type = match self.type_.as_deref() {
-            Some("meeting") => EventType::Meeting,
-            Some("photo") => EventType::Photo,
-            Some("note") => EventType::Note,
-            Some("activity") => EventType::Activity,
-            Some("research") => EventType::Research,
-            Some("reading") => EventType::Reading,
-            Some("exercise") => EventType::Exercise,
-            Some("meal") => EventType::Meal,
-            Some("work") => EventType::Work,
-            _ => EventType::Other,
-        };
+        let type_ = self.type_.unwrap_or_else(|| "observation".to_string());
 
-        let entities = self.entities.unwrap_or_else(|| ParsedEventEntities {
-            people: Vec::new(),
-            organizations: Vec::new(),
-            projects: Vec::new(),
-            artifacts: Vec::new(),
-            concepts: Vec::new(),
-            topics: Vec::new(),
-            activities: Vec::new(),
-            goals: Vec::new(),
-            skills: Vec::new(),
-            places: Vec::new(),
-            devices: Vec::new(),
-            resources: Vec::new(),
-            memory_clusters: Vec::new(),
-            states: Vec::new(),
-        });
+        let entities = self.entities.map(EventEntities::from).unwrap_or_default();
 
         Event {
             schema: self.schema,
             id: self.id,
-            type_: event_type,
+            type_,
             subtype: self.subtype.clone(),
             time: EventTime {
                 start: time_start,
@@ -264,22 +288,7 @@ impl ParsedEventFrontmatter {
                 })
                 .unwrap_or_default(),
             confidence: self.confidence,
-            entities: EventEntities {
-                people: entities.people,
-                organizations: entities.organizations,
-                projects: entities.projects,
-                artifacts: entities.artifacts,
-                concepts: entities.concepts,
-                topics: entities.topics,
-                activities: entities.activities,
-                goals: entities.goals,
-                skills: entities.skills,
-                places: entities.places,
-                devices: entities.devices,
-                resources: entities.resources,
-                memory_clusters: entities.memory_clusters,
-                states: entities.states,
-            },
+            entities,
             tags: self.tags.unwrap_or_default(),
             raw_refs: RawRefs {
                 files: self.raw_refs.unwrap_or_default(),
@@ -544,6 +553,6 @@ confidence: 0.9
 "#;
         let event = EventParser::parse(content).unwrap();
         assert_eq!(event.id, "evt-20260331-001");
-        assert_eq!(event.type_, EventType::Meeting);
+        assert_eq!(event.type_, "meeting");
     }
 }

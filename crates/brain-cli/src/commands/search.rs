@@ -1,11 +1,14 @@
 //! Search command
 
-use brain_core::{BrainConfig, Database, EventRepository};
+use brain_core::{BrainConfig, Database, DictSet, EventRepository};
 
 pub fn execute(config: &BrainConfig, keyword: &str) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::open(&config.db_path)?;
     let conn = db.connection();
     let repo = EventRepository::new(&conn);
+
+    // Load dictionaries for Chinese display
+    let dicts = DictSet::load(&config.dicts_path).unwrap_or_else(|_| DictSet::default_dicts());
 
     println!("Searching for: {}", keyword);
     println!("{}", "=".repeat(50));
@@ -21,7 +24,7 @@ pub fn execute(config: &BrainConfig, keyword: &str) -> Result<(), Box<dyn std::e
         let time = event.time.start.format("%Y-%m-%d %H:%M");
         println!();
         println!("[{}] {}", time, event.id);
-        println!("  类型: {}", event.type_.display_zh());
+        println!("  类型: {}", event.type_display_zh(&dicts));
         if let Some(ref summary) = event.ai.summary {
             println!("  摘要: {}", summary);
         }

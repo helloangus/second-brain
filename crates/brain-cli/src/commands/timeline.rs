@@ -1,6 +1,6 @@
 //! Timeline command
 
-use brain_core::{BrainConfig, Database, EventRepository};
+use brain_core::{BrainConfig, Database, DictSet, EventRepository};
 use chrono::NaiveDate;
 
 pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -26,6 +26,9 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
     let db = Database::open(&config.db_path)?;
     let conn = db.connection();
     let repo = EventRepository::new(&conn);
+
+    // Load dictionaries for Chinese display
+    let dicts = DictSet::load(&config.dicts_path).unwrap_or_else(|_| DictSet::default_dicts());
 
     println!("Timeline: {}", month);
     println!("{}", "=".repeat(50));
@@ -53,7 +56,7 @@ pub fn execute(config: &BrainConfig, month: &str) -> Result<(), Box<dyn std::err
 
         for event in day_events {
             let time = event.time.start.format("%H:%M");
-            let type_str = event.type_.display_zh();
+            let type_str = event.type_display_zh(&dicts);
             let summary = event.ai.summary.as_deref().unwrap_or("(无摘要)");
             println!("  {} [{}] {}", time, type_str, summary);
         }

@@ -1,6 +1,6 @@
 //! Stats command
 
-use brain_core::{BrainConfig, Database, EntityRepository, EventRepository};
+use brain_core::{BrainConfig, Database, DictSet, EntityRepository, EventRepository};
 
 pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::open(&config.db_path)?;
@@ -8,6 +8,9 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
 
     let event_repo = EventRepository::new(&conn);
     let entity_repo = EntityRepository::new(&conn);
+
+    // Load dictionaries for Chinese display
+    let dicts = DictSet::load(&config.dicts_path).unwrap_or_else(|_| DictSet::default_dicts());
 
     let events = event_repo.all()?;
     let entities = entity_repo.all()?;
@@ -24,7 +27,7 @@ pub fn execute(config: &BrainConfig) -> Result<(), Box<dyn std::error::Error>> {
         std::collections::HashMap::new();
     for event in &events {
         *type_counts
-            .entry(event.type_.display_zh().to_string())
+            .entry(event.type_display_zh(&dicts))
             .or_insert(0) += 1;
     }
 

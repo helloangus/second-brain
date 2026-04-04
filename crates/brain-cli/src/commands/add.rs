@@ -3,7 +3,7 @@
 use brain_core::markdown::EventSerializer;
 use brain_core::{
     BrainConfig, Database, DerivedRefs, Event, EventAi, EventEntities, EventRelations, EventSource,
-    EventTime, EventType, GraphHints, RawRefs,
+    EventTime, GraphHints, RawRefs,
 };
 use chrono::Utc;
 use std::fs;
@@ -16,19 +16,8 @@ pub fn execute(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
 
-    // Parse event type
-    let event_type = match type_.to_lowercase().as_str() {
-        "meeting" => EventType::Meeting,
-        "photo" => EventType::Photo,
-        "note" => EventType::Note,
-        "activity" => EventType::Activity,
-        "research" => EventType::Research,
-        "reading" => EventType::Reading,
-        "exercise" => EventType::Exercise,
-        "meal" => EventType::Meal,
-        "work" => EventType::Work,
-        _ => EventType::Other,
-    };
+    // Use provided type as-is (lowercase for consistency)
+    let type_ = type_.to_lowercase();
 
     // Generate event ID
     let id = Event::generate_id();
@@ -37,7 +26,7 @@ pub fn execute(
     let event = Event {
         schema: "event/v1".to_string(),
         id: id.clone(),
-        type_: event_type,
+        type_,
         subtype: None,
         time: EventTime {
             start: now,
