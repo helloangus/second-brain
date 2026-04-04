@@ -31,6 +31,7 @@ pub struct BrainConfig {
 }
 
 impl Default for BrainConfig {
+    /// Creates config with defaults rooted at current working directory.
     fn default() -> Self {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -139,8 +140,8 @@ log_rotation: "{}"
         dir.join("logs.db")
     }
 
-    /// Iterate over all log database paths (for querying historical logs)
-    /// Returns an iterator to avoid loading all paths into memory at once.
+    /// Iterate over all historical log database paths.
+    /// Avoids loading all paths into memory at once.
     pub fn iter_log_db_paths(&self) -> LogDbPathIter {
         LogDbPathIter {
             base_path: self.log_db_path.clone(),
@@ -151,7 +152,7 @@ log_rotation: "{}"
     }
 }
 
-/// Iterator over log database paths
+/// Iterator over log database paths in logs/brain/YYYY/MM[|weekN]/logs.db structure.
 pub struct LogDbPathIter {
     base_path: PathBuf,
     year_iter: Option<fs::ReadDir>,
@@ -164,7 +165,7 @@ impl Iterator for LogDbPathIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // Try to get from current db_iter first
+            // Yield from current db_iter
             if let Some(ref mut db_iter) = self.db_iter {
                 if let Some(Ok(entry)) = db_iter.next() {
                     let path = entry.path();
@@ -173,28 +174,23 @@ impl Iterator for LogDbPathIter {
                     }
                 }
             }
-
-            // db_iter exhausted, need to advance month_iter
             self.db_iter = None;
 
+            // Advance to next month directory
             if let Some(ref mut month_iter) = self.month_iter {
                 if let Some(Ok(entry)) = month_iter.next() {
                     let path = entry.path();
                     if path.is_dir() {
-                        // Try to open db dir (for weekly) or use this dir directly
+                        // Check if dir contains .db files directly (weekly) or has subdirs (monthly)
                         if let Ok(sub_entries) = fs::read_dir(&path) {
-                            // Check if this dir directly contains a .db file
-                            for sub_entry in sub_entries.filter_map(|e| e.ok()) {
-                                let sub_path = sub_entry.path();
-                                if sub_path.is_file()
-                                    && sub_path.extension().map(|e| e == "db").unwrap_or(false)
-                                {
-                                    self.db_iter = Some(fs::read_dir(&path).ok().unwrap());
-                                    break;
-                                }
+                            let has_direct_db = sub_entries.filter_map(|e| e.ok()).any(|e| {
+                                e.path().is_file()
+                                    && e.path().extension().map(|ext| ext == "db").unwrap_or(false)
+                            });
+                            if has_direct_db {
+                                self.db_iter = fs::read_dir(&path).ok();
                             }
                         }
-                        // Try this dir for weekly format
                         if self.db_iter.is_none() {
                             self.db_iter = fs::read_dir(&path).ok();
                         }
@@ -204,10 +200,9 @@ impl Iterator for LogDbPathIter {
                     }
                 }
             }
-
-            // month_iter exhausted, need to advance year_iter
             self.month_iter = None;
 
+            // Advance to next year directory
             if let Some(ref mut year_iter) = self.year_iter {
                 if let Some(Ok(entry)) = year_iter.next() {
                     let path = entry.path();
@@ -220,7 +215,7 @@ impl Iterator for LogDbPathIter {
                 }
             }
 
-            // year_iter exhausted, try to open base_path
+            // Initialize from base_path
             if self.year_iter.is_none() {
                 self.year_iter = fs::read_dir(&self.base_path).ok();
                 if self.year_iter.is_some() {
@@ -238,8 +233,73 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_config() {
+    fn test_default_config_paths() {
         let config = BrainConfig::default();
-        assert!(config.db_path.ends_with("events.db"));
+        assert!(config.db_path.ends_with("index/events.db"));
+        assert!(config.events_path.ends_with("events"));
+        assert!(config.entities_path.ends_with("entities"));
+        assert!(config.raw_data_path.ends_with("data/raw"));
+        assert!(config.pipeline_queue_path.ends_with("pipelines/queue"));
+        assert!(config.dicts_path.ends_with("dicts"));
+        assert!(config.log_db_path.ends_with("logs/brain"));
+    }
+
+    #[test]
+    fn test_default_config_values() {
+        let config = BrainConfig::default();
+        assert_eq!(config.log_rotation, "monthly");
+        assert!(config.adapters.is_empty());
+    }
+
+    #[test]
+    fn test_log_db_path_for_time_monthly() {
+        let config = BrainConfig::default();
+        let path = config.log_db_path_for_time();
+        // Path should be logs/brain/YYYY/MM/logs.db
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("logs/brain"));
+        assert!(path_str.ends_with("logs.db"));
+    }
+
+    #[test]
+    fn test_log_db_path_for_time_weekly() {
+        let config = BrainConfig {
+            log_rotation: "weekly".to_string(),
+            ..Default::default()
+        };
+        let path = config.log_db_path_for_time();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("logs/brain"));
+        assert!(path_str.contains("week"));
+        assert!(path_str.ends_with("logs.db"));
+    }
+
+    #[test]
+    fn test_iter_log_db_paths_empty() {
+        let config = BrainConfig::default();
+        let iter = config.iter_log_db_paths();
+        assert_eq!(iter.count(), 0);
+    }
+
+    #[test]
+    fn test_iter_log_db_paths_impl() {
+        let temp_path = std::env::temp_dir().join("brain_test_logs");
+
+        // Create structure: logs/brain/2026/04/logs.db
+        let db_dir = temp_path.join("logs").join("brain").join("2026").join("04");
+        let _ = std::fs::create_dir_all(&db_dir);
+        let _ = std::fs::write(db_dir.join("logs.db"), b"");
+
+        let config = BrainConfig {
+            log_db_path: temp_path.join("logs").join("brain"),
+            ..Default::default()
+        };
+
+        let paths: Vec<_> = config.iter_log_db_paths().collect();
+        assert_eq!(paths.len(), 1);
+        assert!(paths[0].ends_with("logs.db"));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&temp_path);
     }
 }
