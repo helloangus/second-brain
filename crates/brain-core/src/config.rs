@@ -82,6 +82,11 @@ impl BrainConfig {
 
     /// Get the default config path
     fn config_path() -> Result<PathBuf> {
+        // Check for BRAIN_CONFIG_PATH environment variable first
+        if let Ok(env_path) = std::env::var("BRAIN_CONFIG_PATH") {
+            return Ok(PathBuf::from(env_path));
+        }
+
         let base_dir = ProjectDirs::from("com", "secondbrain", "brain")
             .map(|dirs| dirs.config_dir().to_path_buf())
             .ok_or_else(|| Error::Config("Could not determine config directory".to_string()))?;

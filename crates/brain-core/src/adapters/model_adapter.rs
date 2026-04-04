@@ -1,5 +1,6 @@
 //! Model adapter trait
 
+use crate::dicts::{DictEntry, DictSet};
 use crate::error::Result;
 use crate::models::RawDataType;
 use serde::{Deserialize, Serialize};
@@ -19,14 +20,41 @@ pub struct RawDataInput {
 /// Dictionary context for AI analysis
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DictContext {
+    /// Event type keys for backward compatibility
     #[serde(default)]
     pub event_types: Vec<String>,
+    /// Event subtype keys for backward compatibility
     #[serde(default)]
     pub event_subtypes: Vec<String>,
+    /// Tag keys for backward compatibility
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Topic keys for backward compatibility
     #[serde(default)]
     pub topics: Vec<String>,
+    /// Full dictionary set for Step 2 alignment (not serialized, set at runtime)
+    #[serde(skip)]
+    pub dict_set: Option<DictSet>,
+}
+
+/// New dictionary entries discovered during analysis
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NewDictEntries {
+    #[serde(default)]
+    pub event_types: Vec<DictEntry>,
+    #[serde(default)]
+    pub event_subtypes: Vec<DictEntry>,
+    #[serde(default)]
+    pub tags: Vec<DictEntry>,
+    #[serde(default)]
+    pub topics: Vec<DictEntry>,
+}
+
+/// Analysis output with newly discovered dictionary entries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisOutputWithNewEntries {
+    pub analysis: AnalysisOutput,
+    pub new_entries: NewDictEntries,
 }
 
 /// Output from model analysis
@@ -66,8 +94,9 @@ pub trait ModelAdapter: Send + Sync {
         self.supported_data_types().contains(data_type)
     }
 
-    /// Analyze raw data and return structured output
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutput>;
+    /// Analyze raw data with two-step process (free analysis + dictionary alignment)
+    /// Returns analysis output along with any new dictionary entries discovered
+    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
 
     /// Generate a summary of text content
     fn summarize(&self, text: &str) -> Result<String>;
@@ -93,6 +122,9 @@ pub struct AdapterConfig {
     pub default_model: String,
     #[serde(default)]
     pub timeout_secs: u64,
+    /// Enable thinking mode for models that support it (MiniMax)
+    #[serde(default)]
+    pub thinking: bool,
 }
 
 fn default_model() -> String {
@@ -108,6 +140,7 @@ impl AdapterConfig {
             api_key: None,
             default_model: model.into(),
             timeout_secs: 60,
+            thinking: false,
         }
     }
 
@@ -119,6 +152,24 @@ impl AdapterConfig {
             api_key: Some(api_key.into()),
             default_model: model.into(),
             timeout_secs: 30,
+            thinking: false,
+        }
+    }
+
+    /// Create a MiniMax adapter config
+    pub fn minimax(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        endpoint: impl Into<String>,
+        thinking: bool,
+    ) -> Self {
+        Self {
+            adapter_type: "minimax".to_string(),
+            endpoint: Some(endpoint.into()),
+            api_key: Some(api_key.into()),
+            default_model: model.into(),
+            timeout_secs: 60,
+            thinking,
         }
     }
 }
@@ -145,6 +196,22 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
                     as Box<dyn ModelAdapter>,
             )
+        }
+        "minimax" => {
+            let api_key = config
+                .api_key
+                .clone()
+                .ok_or_else(|| crate::Error::Config("MiniMax API key required".to_string()))?;
+            let endpoint = config
+                .endpoint
+                .clone()
+                .unwrap_or_else(|| "https://api.minimaxi.com/v1".to_string());
+            Ok(Box::new(super::MiniMaxAdapter::new(
+                &api_key,
+                &config.default_model,
+                &endpoint,
+                config.thinking,
+            )?) as Box<dyn ModelAdapter>)
         }
         _ => Err(crate::Error::Config(format!(
             "Unknown adapter type: {}",

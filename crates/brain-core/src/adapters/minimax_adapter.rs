@@ -1,4 +1,4 @@
-//! OpenAI adapter implementation
+//! MiniMax adapter implementation
 
 use crate::adapters::{
     AnalysisOutputWithNewEntries, DictContext, ModelAdapter, NewDictEntries, RawDataInput,
@@ -7,17 +7,44 @@ use crate::adapters::{
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-/// OpenAI adapter for cloud LLM inference
-pub struct OpenAIAdapter {
+/// Deserialize a number that might be a string or a number
+fn deserialize_number_or_string<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(opt.and_then(|v| match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }))
+}
+
+/// MiniMax adapter for cloud LLM inference
+pub struct MiniMaxAdapter {
     api_key: String,
     model: String,
+    endpoint: String,
+    thinking: bool,
 }
 
 #[derive(Debug, Serialize)]
-struct OpenAIRequest {
+struct MiniMaxRequest {
     model: String,
     messages: Vec<Message>,
     temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<ThinkingConfig>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ThinkingConfig {
+    #[serde(rename = "type")]
+    type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enabled: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,7 +54,7 @@ struct Message {
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIResponse {
+struct MiniMaxResponse {
     choices: Vec<Choice>,
 }
 
@@ -41,17 +68,74 @@ struct MessageContent {
     content: String,
 }
 
-impl OpenAIAdapter {
-    /// Create a new OpenAI adapter
-    pub fn new(api_key: &str, model: &str) -> Result<Self> {
+impl MiniMaxAdapter {
+    /// Create a new MiniMax adapter
+    pub fn new(api_key: &str, model: &str, endpoint: &str, thinking: bool) -> Result<Self> {
         Ok(Self {
             api_key: api_key.to_string(),
             model: model.to_string(),
+            endpoint: endpoint.to_string().trim_end_matches('/').to_string(),
+            thinking,
         })
     }
 
+    /// Extract JSON from content that may be wrapped in markdown code blocks
+    fn extract_json(content: &str) -> &str {
+        // Try to find JSON inside markdown code blocks first
+        if let Some(start) = content.find("```json") {
+            let after_start = &content[start + 7..];
+            // Find the closing ``` - look for it near the end of the content first
+            // Sometimes there are multiple ``` patterns, so we try from the end
+            let search_content = after_start.trim();
+            if let Some(json_start) = search_content.find('{') {
+                let potential = &search_content[json_start..];
+                // Just use find_matching_brace since we're now working with trimmed content
+                if let Some(end) = Self::find_matching_brace(potential) {
+                    return &potential[..=end];
+                }
+            }
+        }
+        // Try generic code blocks (without json specifier)
+        if let Some(start) = content.find("```") {
+            let after_code = &content[start + 3..];
+            let search_content = after_code.trim();
+            if let Some(code_start) = search_content.find('{') {
+                let potential = &search_content[code_start..];
+                if let Some(end) = Self::find_matching_brace(potential) {
+                    return &potential[..=end];
+                }
+            }
+        }
+        // Try to find raw JSON object
+        if let Some(start) = content.find('{') {
+            let potential = &content[start..];
+            if let Some(end) = Self::find_matching_brace(potential) {
+                return &potential[..=end];
+            }
+        }
+        // Fallback: return original content
+        content
+    }
+
+    /// Find the matching closing brace for an opening brace
+    /// Returns the position of the closing brace that completes the JSON object
+    fn find_matching_brace(s: &str) -> Option<usize> {
+        // First, validate that we start with {
+        let first_char = s.chars().next()?;
+        if first_char != '{' {
+            return None;
+        }
+
+        // Find the position of the last } in the string
+        let last_brace = s.rfind('}')?;
+
+        // Return the position of the last }
+        // This works because the JSON structure should end with the outermost }
+        Some(last_brace)
+    }
+
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str, body: &impl Serialize) -> Result<T> {
-        let url = format!("https://api.minimaxi.com/v1/{}", path);
+        let url = format!("{}/{}", self.endpoint, path);
         let body_str =
             serde_json::to_string(body).map_err(|e| Error::Config(format!("JSON error: {}", e)))?;
 
@@ -67,14 +151,14 @@ impl OpenAIAdapter {
 
         let text = response.into_string().map_err(Error::Io)?;
         let result = serde_json::from_str(&text)
-            .map_err(|e| Error::Config(format!("Parse error: {}", e)))?;
+            .map_err(|e| Error::Config(format!("Parse error: {} | Response: {}", e, &text)))?;
         Ok(result)
     }
 }
 
-impl ModelAdapter for OpenAIAdapter {
+impl ModelAdapter for MiniMaxAdapter {
     fn name(&self) -> &str {
-        "openai"
+        "minimax"
     }
 
     fn supported_data_types(&self) -> Vec<RawDataType> {
@@ -115,23 +199,34 @@ Respond in JSON format:
             input.data_type, truncated_content
         );
 
-        let step1_response: OpenAIResponse = self.post(
+        let thinking_config = if self.thinking {
+            Some(ThinkingConfig {
+                type_: "thinking".to_string(),
+                enabled: Some(true),
+            })
+        } else {
+            None
+        };
+
+        let step1_response: MiniMaxResponse = self.post(
             "chat/completions",
-            &OpenAIRequest {
+            &MiniMaxRequest {
                 model: self.model.clone(),
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: step1_prompt,
                 }],
                 temperature: 0.7,
+                thinking: thinking_config.clone(),
             },
         )?;
 
-        let step1_content = step1_response
+        let step1_content_raw = step1_response
             .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
+        let step1_content = Self::extract_json(&step1_content_raw);
 
         // Parse Step 1 output
         #[derive(Deserialize, Serialize)]
@@ -144,10 +239,11 @@ Respond in JSON format:
             tags: Vec<String>,
             topics: Vec<String>,
             entities: Vec<String>,
+            #[serde(deserialize_with = "deserialize_number_or_string", default)]
             confidence: Option<f64>,
         }
 
-        let step1: Step1Output = serde_json::from_str(&step1_content)
+        let step1: Step1Output = serde_json::from_str(step1_content)
             .map_err(|e| Error::Config(format!("Step1 parse error: {}", e)))?;
 
         // === STEP 2: Dictionary-aligned analysis ===
@@ -196,23 +292,25 @@ Respond in JSON format:
             dict_context_str
         );
 
-        let step2_response: OpenAIResponse = self.post(
+        let step2_response: MiniMaxResponse = self.post(
             "chat/completions",
-            &OpenAIRequest {
+            &MiniMaxRequest {
                 model: self.model.clone(),
                 messages: vec![Message {
                     role: "user".to_string(),
                     content: step2_prompt,
                 }],
                 temperature: 0.7,
+                thinking: thinking_config,
             },
         )?;
 
-        let step2_content = step2_response
+        let step2_content_raw = step2_response
             .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
+        let step2_content = Self::extract_json(&step2_content_raw);
 
         // Parse Step 2 output
         #[derive(Deserialize)]
@@ -225,6 +323,7 @@ Respond in JSON format:
             tags: Vec<String>,
             topics: Vec<String>,
             entities: Vec<String>,
+            #[serde(deserialize_with = "deserialize_number_or_string", default)]
             confidence: Option<f64>,
         }
 
@@ -235,7 +334,7 @@ Respond in JSON format:
             new_entries: NewDictEntries,
         }
 
-        let step2: Step2Output = serde_json::from_str(&step2_content)
+        let step2: Step2Output = serde_json::from_str(step2_content)
             .map_err(|e| Error::Config(format!("Step2 parse error: {}", e)))?;
 
         // Build final output
@@ -248,7 +347,7 @@ Respond in JSON format:
             topics: step2.final_.topics,
             entities: step2.final_.entities,
             confidence: step2.final_.confidence,
-            raw_response: serde_json::Value::String(step2_content.clone()),
+            raw_response: serde_json::Value::String(step2_content.to_string()),
         };
 
         Ok(AnalysisOutputWithNewEntries {
@@ -258,16 +357,26 @@ Respond in JSON format:
     }
 
     fn summarize(&self, text: &str) -> Result<String> {
-        let request = OpenAIRequest {
+        let thinking_config = if self.thinking {
+            Some(ThinkingConfig {
+                type_: "thinking".to_string(),
+                enabled: Some(true),
+            })
+        } else {
+            None
+        };
+
+        let request = MiniMaxRequest {
             model: self.model.clone(),
             messages: vec![Message {
                 role: "user".to_string(),
                 content: format!("Summarize the following text in 2-3 sentences:\n\n{}", text),
             }],
             temperature: 0.7,
+            thinking: thinking_config,
         };
 
-        let response: OpenAIResponse = self.post("chat/completions", &request)?;
+        let response: MiniMaxResponse = self.post("chat/completions", &request)?;
 
         Ok(response
             .choices
@@ -294,7 +403,7 @@ Respond in JSON format:
         }
 
         let request = EmbedRequest {
-            model: "text-embedding-3-small".to_string(),
+            model: "embo-01".to_string(),
             input: text.to_string(),
         };
 
@@ -312,7 +421,7 @@ Respond in JSON format:
     }
 }
 
-impl OpenAIAdapter {
+impl MiniMaxAdapter {
     /// Build dictionary context string for Step 2 prompt
     pub fn build_dict_context(ctx: &DictContext) -> String {
         let mut parts = Vec::new();

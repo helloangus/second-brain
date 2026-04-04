@@ -183,15 +183,19 @@ pub async fn process_queue(
 }
 
 /// Load dictionary context for AI prompts
-fn load_dict_context(dicts_path: &std::path::Path) -> DictContext {
+fn load_dict_context(dicts_path: &std::path::Path) -> (DictContext, DictSet) {
     match DictSet::load(dicts_path) {
-        Ok(dicts) => DictContext {
-            event_types: dicts.event_type.keys().into_iter().cloned().collect(),
-            event_subtypes: dicts.event_subtype.keys().into_iter().cloned().collect(),
-            tags: dicts.tags.keys().into_iter().cloned().collect(),
-            topics: dicts.topics.keys().into_iter().cloned().collect(),
-        },
-        Err(_) => DictContext::default(),
+        Ok(dicts) => (
+            DictContext {
+                event_types: dicts.event_type.keys().into_iter().cloned().collect(),
+                event_subtypes: dicts.event_subtype.keys().into_iter().cloned().collect(),
+                tags: dicts.tags.keys().into_iter().cloned().collect(),
+                topics: dicts.topics.keys().into_iter().cloned().collect(),
+                dict_set: Some(dicts.clone()),
+            },
+            dicts,
+        ),
+        Err(_) => (DictContext::default(), DictSet::default_dicts()),
     }
 }
 
@@ -209,8 +213,8 @@ fn process_task_sync(
         config.raw_data_path.join(&task.input.path)
     };
 
-    // Load dictionaries for AI context
-    let dict_context = load_dict_context(&config.dicts_path);
+    // Load dictionaries for AI context (includes full DictSet for Step 2)
+    let (dict_context, dicts) = load_dict_context(&config.dicts_path);
 
     // Create input for the adapter
     let input = RawDataInput {
@@ -224,9 +228,12 @@ fn process_task_sync(
     let file_size_bytes = fs::metadata(&input_path).map(|m| m.len()).ok();
     let ai_start = std::time::Instant::now();
 
-    let output: PipelineOutput = if adapter.supports(&task.data_type()) {
+    let analysis_result: Result<
+        (brain_core::adapters::AnalysisOutputWithNewEntries, DictSet),
+        PipelineError,
+    > = if adapter.supports(&task.data_type()) {
         match adapter.analyze(&input) {
-            Ok(analysis) => {
+            Ok(result) => {
                 let ai_elapsed = ai_start.elapsed();
                 let ai_duration_ms = ai_elapsed.as_millis() as u64;
 
@@ -254,16 +261,8 @@ fn process_task_sync(
                     data_type_str
                 );
 
-                PipelineOutput {
-                    summary: analysis.summary,
-                    extended: analysis.extended,
-                    type_: analysis.type_,
-                    subtype: analysis.subtype,
-                    tags: analysis.tags,
-                    topics: analysis.topics,
-                    entities: analysis.entities,
-                    confidence: analysis.confidence,
-                }
+                // dicts may have been modified, pass it back
+                Ok((result, dicts))
             }
             Err(e) => {
                 let ai_elapsed = ai_start.elapsed();
@@ -289,7 +288,7 @@ fn process_task_sync(
                 );
 
                 warn!("Analysis failed: {}", e);
-                PipelineOutput::default()
+                Err(PipelineError(format!("Analysis error: {}", e)))
             }
         }
     } else {
@@ -298,7 +297,27 @@ fn process_task_sync(
             adapter.name(),
             task.data_type()
         );
-        PipelineOutput::default()
+        Err(PipelineError(format!(
+            "Adapter {} does not support {:?}",
+            adapter.name(),
+            task.data_type()
+        )))
+    };
+
+    let (analysis_output, mut dicts) = match analysis_result {
+        Ok((result, d)) => (result, d),
+        Err(e) => return Err(e),
+    };
+
+    let output = PipelineOutput {
+        summary: analysis_output.analysis.summary,
+        extended: analysis_output.analysis.extended,
+        type_: analysis_output.analysis.type_,
+        subtype: analysis_output.analysis.subtype,
+        tags: analysis_output.analysis.tags,
+        topics: analysis_output.analysis.topics,
+        entities: analysis_output.analysis.entities,
+        confidence: analysis_output.analysis.confidence,
     };
 
     // Build event from output
@@ -351,6 +370,48 @@ fn process_task_sync(
     let repo = brain_core::EventRepository::new(&conn);
     repo.upsert(&event)
         .map_err(|e| PipelineError(format!("Repo error: {}", e)))?;
+
+    // Add new dictionary entries discovered during analysis
+    let new_entries = &analysis_output.new_entries;
+    if !new_entries.event_types.is_empty()
+        || !new_entries.event_subtypes.is_empty()
+        || !new_entries.tags.is_empty()
+        || !new_entries.topics.is_empty()
+    {
+        let mut changed = false;
+
+        for entry in &new_entries.event_types {
+            if !dicts.event_type.exists(&entry.key) {
+                dicts.event_type.add(entry.clone());
+                changed = true;
+            }
+        }
+        for entry in &new_entries.event_subtypes {
+            if !dicts.event_subtype.exists(&entry.key) {
+                dicts.event_subtype.add(entry.clone());
+                changed = true;
+            }
+        }
+        for entry in &new_entries.tags {
+            if !dicts.tags.exists(&entry.key) {
+                dicts.tags.add(entry.clone());
+                changed = true;
+            }
+        }
+        for entry in &new_entries.topics {
+            if !dicts.topics.exists(&entry.key) {
+                dicts.topics.add(entry.clone());
+                changed = true;
+            }
+        }
+
+        if changed {
+            dicts
+                .save(&config.dicts_path)
+                .map_err(|e| PipelineError(format!("Dict save error: {}", e)))?;
+            info!("Updated dictionaries with new entries");
+        }
+    }
 
     Ok(())
 }

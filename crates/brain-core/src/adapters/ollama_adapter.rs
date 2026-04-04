@@ -1,8 +1,13 @@
 //! Ollama adapter implementation
 
-use crate::adapters::{AnalysisOutput, ModelAdapter, RawDataInput, RawDataType};
+use crate::adapters::{
+    AnalysisOutput, AnalysisOutputWithNewEntries, DictContext, ModelAdapter, NewDictEntries,
+    RawDataInput, RawDataType,
+};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use tracing::{debug, error};
 
 /// Ollama adapter for local LLM inference
 pub struct OllamaAdapter {
@@ -31,6 +36,48 @@ struct OllamaEmbedRequest {
 #[derive(Debug, Deserialize)]
 struct OllamaEmbedResponse {
     embedding: Vec<f32>,
+}
+
+/// Step 1 output - freely analyzed without dictionary constraints
+#[derive(Debug, Deserialize, Serialize)]
+struct Step1Output {
+    summary: Option<String>,
+    extended: Option<String>,
+    #[serde(rename = "type")]
+    type_: Option<String>,
+    subtype: Option<String>,
+    tags: Vec<String>,
+    topics: Vec<String>,
+    entities: Vec<String>,
+    confidence: Option<f64>,
+}
+
+/// Atomic counter for debug request IDs
+static DEBUG_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Save debug info (prompt and response) to files
+fn save_debug_info(prefix: &str, step: &str, prompt: &str, response: &str) {
+    let id = DEBUG_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let debug_dir = std::path::Path::new("/tmp/brain-debug");
+    let _ = std::fs::create_dir_all(debug_dir);
+
+    let prompt_path = debug_dir.join(format!("{:03}_{}_{}_prompt.txt", id, prefix, step));
+    let response_path = debug_dir.join(format!("{:03}_{}_{}_response.txt", id, prefix, step));
+
+    if let Err(e) = std::fs::write(&prompt_path, prompt) {
+        error!("Failed to write debug prompt: {}", e);
+    }
+    if let Err(e) = std::fs::write(&response_path, response) {
+        error!("Failed to write debug response: {}", e);
+    }
+
+    debug!(
+        "Debug info saved: {} {} prompt={} response={}",
+        prefix,
+        step,
+        prompt_path.display(),
+        response_path.display()
+    );
 }
 
 impl OllamaAdapter {
@@ -77,93 +124,157 @@ impl ModelAdapter for OllamaAdapter {
         vec![RawDataType::Text, RawDataType::Image, RawDataType::Document]
     }
 
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutput> {
-        // Read file content if it's text
+    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
+        // Read file content
         let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
+        let truncated_content = content.chars().take(2000).collect::<String>();
 
-        // Build dict context for the prompt
-        let dict_context_str = if let Some(ref ctx) = input.dict_context {
-            let types = if ctx.event_types.is_empty() {
-                "none".to_string()
-            } else {
-                ctx.event_types.join(", ")
-            };
-            let subtypes = if ctx.event_subtypes.is_empty() {
-                "none".to_string()
-            } else {
-                ctx.event_subtypes.join(", ")
-            };
-            let tags = if ctx.tags.is_empty() {
-                "none".to_string()
-            } else {
-                ctx.tags.join(", ")
-            };
-            let topics = if ctx.topics.is_empty() {
-                "none".to_string()
-            } else {
-                ctx.topics.join(", ")
-            };
-            format!(
-                "\n\nWhen choosing event type, subtype, tags, and topics, prefer from these existing values:\n- Event types (use one): {}\n- Event subtypes (use one): {}\n- Tags (use existing when relevant): {}\n- Topics (use existing when relevant): {}",
-                types, subtypes, tags, topics
-            )
-        } else {
-            String::new()
-        };
-
-        // Create a prompt for analysis
-        let prompt = format!(
+        // === STEP 1: Free analysis (no dictionary constraints) ===
+        let step1_prompt = format!(
             r#"Analyze this {} and provide:
 1. A brief summary (2-3 sentences)
 2. Extended content - use this field whenever the content has complexity, multiple points, or details that don't fit in a 2-3 sentence summary. This field has no length limit.
-3. Event type (prefer from existing: see below)
-4. Event subtype (prefer from existing: see below)
-5. Key tags (prefer from existing when relevant)
-6. Key topics (prefer from existing when relevant)
+3. Event type (choose freely based on content meaning)
+4. Event subtype (choose freely based on content meaning)
+5. Key tags (create new ones if needed - be creative and specific)
+6. Key topics (create new ones if needed - be creative and specific)
 7. Any entities mentioned
 
+IMPORTANT: Choose type, subtype, tags, and topics based SOLELY on what best describes the content. Do NOT try to match existing values. Create new values if nothing existing fits perfectly.
+
 Content:
-{}{}
+{}
 
 Respond in JSON format:
 {{
     "summary": "2-3 sentence brief summary",
-    "extended": "detailed content - use whenever summary cannot capture all important information, OR null if content is simple enough",
-    "type": "prefer from existing event types",
-    "subtype": "prefer from existing subtypes",
-    "tags": ["prefer existing tags"],
-    "topics": ["prefer existing topics"],
+    "extended": "detailed content OR null if content is simple",
+    "type": "freely chosen event type",
+    "subtype": "freely chosen subtype",
+    "tags": ["tag1", "tag2"],
+    "topics": ["topic1", "topic2"],
     "entities": ["entity1"],
-    "confidence": 0.0-1.0 (how certain you are about the analysis - lower if content is ambiguous or lacks clear signals)
+    "confidence": 0.0-1.0
 }}"#,
-            input.data_type,
-            content.chars().take(2000).collect::<String>(),
+            input.data_type, truncated_content
+        );
+
+        let step1_response: OllamaResponse = self.post(
+            "api/generate",
+            &OllamaRequest {
+                model: self.model.clone(),
+                prompt: step1_prompt.clone(),
+                stream: false,
+            },
+        )?;
+
+        // Debug: save step1 prompt and response
+        save_debug_info("analyze", "step1", &step1_prompt, &step1_response.response);
+
+        // Parse Step 1 output
+        let step1: Step1Output = serde_json::from_str(&step1_response.response)
+            .map_err(|e| Error::Config(format!("Step1 parse error: {}", e)))?;
+
+        // === STEP 2: Dictionary-aligned analysis ===
+        // Build dictionary context for Step 2
+        let dict_context_str = if let Some(ref ctx) = input.dict_context {
+            Self::build_dict_context(ctx)
+        } else {
+            String::new()
+        };
+
+        let step2_prompt = format!(
+            r#"Review your initial analysis and align with existing dictionary where possible.
+
+INITIAL ANALYSIS:
+{}
+
+EXISTING DICTIONARY:
+{}
+
+TASK:
+For each field (type, subtype, tags, topics):
+- If initial value matches an existing dictionary entry -> USE the existing entry (with exact key)
+- If initial value is NEW (not in dictionary) -> KEEP it as NEW and it will be added to the dictionary
+
+IMPORTANT: Prefer existing dictionary values when they fit well. But don't force a match if the initial value is genuinely different or more accurate.
+
+Respond in JSON format:
+{{
+    "final": {{
+        "summary": "brief summary",
+        "extended": "detailed content OR null",
+        "type": "existing or new event type",
+        "subtype": "existing or new subtype",
+        "tags": ["tag1", "tag2"],
+        "topics": ["topic1", "topic2"],
+        "entities": ["entity1"],
+        "confidence": 0.0-1.0
+    }},
+    "new_entries": {{
+        "event_types": [{{"key": "new_type", "zh": null, "description": null}}],
+        "event_subtypes": [],
+        "tags": [{{"key": "new_tag", "zh": null, "description": null}}],
+        "topics": [{{"key": "new_topic", "zh": null, "description": null}}]
+    }}
+}}"#,
+            serde_json::to_string(&step1).unwrap_or_default(),
             dict_context_str
         );
 
-        let request = OllamaRequest {
-            model: self.model.clone(),
-            prompt,
-            stream: false,
+        let step2_response: OllamaResponse = self.post(
+            "api/generate",
+            &OllamaRequest {
+                model: self.model.clone(),
+                prompt: step2_prompt.clone(),
+                stream: false,
+            },
+        )?;
+
+        // Debug: save step2 prompt and response
+        save_debug_info("analyze", "step2", &step2_prompt, &step2_response.response);
+
+        // Parse Step 2 output
+        #[derive(Deserialize)]
+        struct Step2Final {
+            summary: Option<String>,
+            extended: Option<String>,
+            #[serde(rename = "type")]
+            type_: Option<String>,
+            subtype: Option<String>,
+            tags: Vec<String>,
+            topics: Vec<String>,
+            entities: Vec<String>,
+            confidence: Option<f64>,
+        }
+
+        #[derive(Deserialize)]
+        struct Step2Output {
+            #[serde(rename = "final")]
+            final_: Step2Final,
+            new_entries: NewDictEntries,
+        }
+
+        let step2: Step2Output = serde_json::from_str(&step2_response.response)
+            .map_err(|e| Error::Config(format!("Step2 parse error: {}", e)))?;
+
+        // Build final output
+        let analysis = AnalysisOutput {
+            summary: step2.final_.summary,
+            extended: step2.final_.extended,
+            type_: step2.final_.type_,
+            subtype: step2.final_.subtype,
+            tags: step2.final_.tags,
+            topics: step2.final_.topics,
+            entities: step2.final_.entities,
+            confidence: step2.final_.confidence,
+            raw_response: serde_json::Value::String(step2_response.response.clone()),
         };
 
-        let response: OllamaResponse = self.post("api/generate", &request)?;
-
-        // Try to parse as JSON
-        let output: AnalysisOutput =
-            serde_json::from_str(&response.response).unwrap_or_else(|_| AnalysisOutput {
-                summary: Some(response.response.clone()),
-                extended: None,
-                type_: None,
-                subtype: None,
-                tags: Vec::new(),
-                topics: Vec::new(),
-                entities: Vec::new(),
-                confidence: None,
-                raw_response: serde_json::Value::String(response.response),
-            });
-
-        Ok(output)
+        Ok(AnalysisOutputWithNewEntries {
+            analysis,
+            new_entries: step2.new_entries,
+        })
     }
 
     fn summarize(&self, text: &str) -> Result<String> {
@@ -194,6 +305,130 @@ Respond in JSON format:
         match ureq::get(&url).call() {
             Ok(response) => Ok(response.status() < 400),
             Err(_) => Ok(false),
+        }
+    }
+}
+
+impl OllamaAdapter {
+    /// Build dictionary context string for Step 2 prompt
+    pub fn build_dict_context(ctx: &DictContext) -> String {
+        let mut parts = Vec::new();
+
+        // Event Types
+        if let Some(ref dict_set) = ctx.dict_set {
+            let entries: Vec<String> = dict_set
+                .event_type
+                .list()
+                .iter()
+                .map(|e| {
+                    let zh = e.zh.as_deref().unwrap_or("");
+                    let desc = e.description.as_deref().unwrap_or("");
+                    if zh.is_empty() && desc.is_empty() {
+                        format!("  - {}", e.key)
+                    } else if zh.is_empty() {
+                        format!("  - {}: {}", e.key, desc)
+                    } else if desc.is_empty() {
+                        format!("  - {} ({})", e.key, zh)
+                    } else {
+                        format!("  - {} ({}): {}", e.key, zh, desc)
+                    }
+                })
+                .collect();
+            if !entries.is_empty() {
+                parts.push(format!("Event Types:\n{}", entries.join("\n")));
+            }
+
+            // Event Subtypes
+            let entries: Vec<String> = dict_set
+                .event_subtype
+                .list()
+                .iter()
+                .map(|e| {
+                    let zh = e.zh.as_deref().unwrap_or("");
+                    let desc = e.description.as_deref().unwrap_or("");
+                    if zh.is_empty() && desc.is_empty() {
+                        format!("  - {}", e.key)
+                    } else if zh.is_empty() {
+                        format!("  - {}: {}", e.key, desc)
+                    } else if desc.is_empty() {
+                        format!("  - {} ({})", e.key, zh)
+                    } else {
+                        format!("  - {} ({}): {}", e.key, zh, desc)
+                    }
+                })
+                .collect();
+            if !entries.is_empty() {
+                parts.push(format!("Event Subtypes:\n{}", entries.join("\n")));
+            }
+
+            // Tags
+            let entries: Vec<String> = dict_set
+                .tags
+                .list()
+                .iter()
+                .map(|e| {
+                    let zh = e.zh.as_deref().unwrap_or("");
+                    let desc = e.description.as_deref().unwrap_or("");
+                    if zh.is_empty() && desc.is_empty() {
+                        format!("  - {}", e.key)
+                    } else if zh.is_empty() {
+                        format!("  - {}: {}", e.key, desc)
+                    } else if desc.is_empty() {
+                        format!("  - {} ({})", e.key, zh)
+                    } else {
+                        format!("  - {} ({}): {}", e.key, zh, desc)
+                    }
+                })
+                .collect();
+            if !entries.is_empty() {
+                parts.push(format!("Tags:\n{}", entries.join("\n")));
+            }
+
+            // Topics
+            let entries: Vec<String> = dict_set
+                .topics
+                .list()
+                .iter()
+                .map(|e| {
+                    let zh = e.zh.as_deref().unwrap_or("");
+                    let desc = e.description.as_deref().unwrap_or("");
+                    if zh.is_empty() && desc.is_empty() {
+                        format!("  - {}", e.key)
+                    } else if zh.is_empty() {
+                        format!("  - {}: {}", e.key, desc)
+                    } else if desc.is_empty() {
+                        format!("  - {} ({})", e.key, zh)
+                    } else {
+                        format!("  - {} ({}): {}", e.key, zh, desc)
+                    }
+                })
+                .collect();
+            if !entries.is_empty() {
+                parts.push(format!("Topics:\n{}", entries.join("\n")));
+            }
+        } else {
+            // Fallback: use the old Vec<String> fields
+            if !ctx.event_types.is_empty() {
+                parts.push(format!("Event Types:\n  {}", ctx.event_types.join(", ")));
+            }
+            if !ctx.event_subtypes.is_empty() {
+                parts.push(format!(
+                    "Event Subtypes:\n  {}",
+                    ctx.event_subtypes.join(", ")
+                ));
+            }
+            if !ctx.tags.is_empty() {
+                parts.push(format!("Tags:\n  {}", ctx.tags.join(", ")));
+            }
+            if !ctx.topics.is_empty() {
+                parts.push(format!("Topics:\n  {}", ctx.topics.join(", ")));
+            }
+        }
+
+        if parts.is_empty() {
+            "No existing dictionary entries.".to_string()
+        } else {
+            parts.join("\n\n")
         }
     }
 }
