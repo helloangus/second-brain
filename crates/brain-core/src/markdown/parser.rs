@@ -615,24 +615,11 @@ impl ParsedEntityFrontmatter {
     /// Status string is mapped to EntityStatus enum. Unknown statuses default to Active.
     fn into_entity(self) -> Entity {
         // Map type string to EntityType enum
-        let entity_type = match self.type_.as_deref() {
-            Some("person") => EntityType::Person,
-            Some("organization") => EntityType::Organization,
-            Some("project") => EntityType::Project,
-            Some("artifact") => EntityType::Artifact,
-            Some("concept") => EntityType::Concept,
-            Some("topic") => EntityType::Topic,
-            Some("activity") => EntityType::Activity,
-            Some("goal") => EntityType::Goal,
-            Some("skill") => EntityType::Skill,
-            Some("place") => EntityType::Place,
-            Some("device") => EntityType::Device,
-            Some("resource") => EntityType::Resource,
-            Some("memory_cluster") => EntityType::MemoryCluster,
-            Some("state") => EntityType::State,
-            // Default to Topic for unknown types
-            _ => EntityType::Topic,
-        };
+        let entity_type = self
+            .type_
+            .as_deref()
+            .map(EntityType::from_singular)
+            .unwrap_or_default();
 
         // Map status string to EntityStatus enum
         let status = match self.status.as_deref() {

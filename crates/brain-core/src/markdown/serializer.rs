@@ -1,9 +1,15 @@
 //! Markdown serializer
+//!
+//! Provides serialization of Event and Entity structs to Markdown files
+//! with YAML frontmatter. The serializers are stateless and can be reused
+//! across multiple serialization operations.
 
 use crate::error::Result;
 use crate::models::*;
 
-/// Serializer for event markdown files
+/// Serializer for event markdown files.
+/// This struct is stateless; all methods borrow their input data.
+#[derive(Default)]
 pub struct EventSerializer;
 
 impl EventSerializer {
@@ -99,22 +105,13 @@ impl EventSerializer {
         {
             yaml.push_str("ai:\n");
             if let Some(ref summary) = event.ai.summary {
-                yaml.push_str("  summary: >\n");
-                for line in summary.lines() {
-                    yaml.push_str(&format!("    {}\n", line));
-                }
+                self.serialize_block_scalar(&mut yaml, "  summary", summary);
             }
             if let Some(ref extended) = event.ai.extended {
-                yaml.push_str("  extended: >\n");
-                for line in extended.lines() {
-                    yaml.push_str(&format!("    {}\n", line));
-                }
+                self.serialize_block_scalar(&mut yaml, "  extended", extended);
             }
             if !event.ai.topics.is_empty() {
-                yaml.push_str("  topics:\n");
-                for topic in &event.ai.topics {
-                    yaml.push_str(&format!("    - {}\n", topic));
-                }
+                self.serialize_list(&mut yaml, "  topics", &event.ai.topics);
             }
             if let Some(ref sentiment) = event.ai.sentiment {
                 yaml.push_str(&format!("  sentiment: {}\n", sentiment));
@@ -127,10 +124,7 @@ impl EventSerializer {
         // Relations
         if !event.relations.inferred_from.is_empty() {
             yaml.push_str("relations:\n");
-            yaml.push_str("  inferred_from:\n");
-            for src in &event.relations.inferred_from {
-                yaml.push_str(&format!("    - {}\n", src));
-            }
+            self.serialize_list(&mut yaml, "  inferred_from", &event.relations.inferred_from);
         }
 
         // Graph hints
@@ -149,39 +143,51 @@ impl EventSerializer {
     }
 
     fn serialize_entities(&self, entities: &EventEntities, yaml: &mut String) {
+        // Serializes entity references grouped by type.
+        // Uses EntityType::plural() to get the correct YAML key (e.g., "people", "topics").
+        // Only non-empty entity lists are serialized.
         for (entity_type, ids) in &entities.0 {
             if ids.is_empty() {
                 continue;
             }
-            let key = pluralize(entity_type);
+            let key = entity_type.plural();
             yaml.push_str(&format!("  {}:\n", key));
             for id in ids {
                 yaml.push_str(&format!("    - {}\n", id));
             }
         }
     }
-}
 
-fn pluralize(entity_type: &EntityType) -> &'static str {
-    match entity_type {
-        EntityType::Person => "people",
-        EntityType::Organization => "organizations",
-        EntityType::Project => "projects",
-        EntityType::Artifact => "artifacts",
-        EntityType::Concept => "concepts",
-        EntityType::Topic => "topics",
-        EntityType::Activity => "activities",
-        EntityType::Goal => "goals",
-        EntityType::Skill => "skills",
-        EntityType::Place => "places",
-        EntityType::Device => "devices",
-        EntityType::Resource => "resources",
-        EntityType::MemoryCluster => "memory_clusters",
-        EntityType::State => "states",
+    /// Serialize a multiline string as a YAML block scalar (>).
+    ///
+    /// Block scalar folds newlines to spaces, producing a single-line string value.
+    /// This format is used for long text fields (summary, description) to avoid
+    /// escaping concerns with special characters in multi-line strings.
+    fn serialize_block_scalar(&self, yaml: &mut String, key: &str, value: &str) {
+        yaml.push_str(&format!("{}: >\n", key));
+        for line in value.lines() {
+            yaml.push_str(&format!("    {}\n", line));
+        }
+    }
+
+    /// Serialize an iterator of strings as a YAML list.
+    /// Each item is indented with 4 spaces (matching original serialization format).
+    fn serialize_list(
+        &self,
+        yaml: &mut String,
+        key: &str,
+        items: impl IntoIterator<Item = impl AsRef<str>>,
+    ) {
+        yaml.push_str(&format!("{}:\n", key));
+        for item in items {
+            yaml.push_str(&format!("    - {}\n", item.as_ref()));
+        }
     }
 }
 
-/// Serializer for entity markdown files
+/// Serializer for entity markdown files.
+/// This struct is stateless; all methods borrow their input data.
+#[derive(Default)]
 pub struct EntitySerializer;
 
 impl EntitySerializer {
@@ -202,14 +208,7 @@ impl EntitySerializer {
             }
         }
 
-        yaml.push_str(&format!(
-            "status: {}\n",
-            match entity.status {
-                EntityStatus::Active => "active",
-                EntityStatus::Archived => "archived",
-                EntityStatus::Merged => "merged",
-            }
-        ));
+        yaml.push_str(&format!("status: {}\n", entity.status));
         yaml.push_str(&format!("confidence: {}\n", entity.confidence));
 
         // Classification
@@ -315,7 +314,12 @@ impl EntitySerializer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::markdown::{EntityParser, EventParser};
     use chrono::{TimeZone, Utc};
+
+    // =============================================================================
+    // EventSerializer Tests
+    // =============================================================================
 
     #[test]
     fn test_serialize_event() {
@@ -346,5 +350,346 @@ mod tests {
         let yaml = EventSerializer.serialize(&event).unwrap();
         assert!(yaml.contains("id: evt-20260331-001"));
         assert!(yaml.contains("type: meeting"));
+    }
+
+    #[test]
+    fn test_serialize_event_with_ai_block_scalar() {
+        // Tests that multiline AI summary/extended are serialized as block scalars (>)
+        let event = Event {
+            schema: "event/v1".to_string(),
+            id: "evt-ai-test".to_string(),
+            type_: "note".to_string(),
+            subtype: None,
+            time: EventTime {
+                start: Utc.with_ymd_and_hms(2026, 4, 5, 14, 0, 0).unwrap(),
+                end: None,
+                timezone: "UTC".to_string(),
+            },
+            created_at: None,
+            ingested_at: None,
+            source: EventSource::default(),
+            confidence: 0.8,
+            entities: EventEntities::default(),
+            tags: vec![],
+            raw_refs: RawRefs::default(),
+            derived_refs: DerivedRefs::default(),
+            ai: EventAi {
+                summary: Some("Team standup\nwith discussion of sprint goals".to_string()),
+                extended: Some("More detailed notes\non the second line".to_string()),
+                topics: vec!["planning".to_string(), "sprint".to_string()],
+                sentiment: Some("positive".to_string()),
+                extraction_version: Some(1),
+            },
+            relations: EventRelations::default(),
+            graph_hints: GraphHints::default(),
+            schema_version: 1,
+        };
+
+        let yaml = EventSerializer.serialize(&event).unwrap();
+
+        // Verify block scalar format
+        assert!(yaml.contains("summary: >"));
+        assert!(yaml.contains("extended: >"));
+        assert!(yaml.contains("Team standup"));
+        assert!(yaml.contains("More detailed notes"));
+
+        // Verify list format for topics
+        assert!(yaml.contains("  topics:"));
+        assert!(yaml.contains("    - planning"));
+        assert!(yaml.contains("    - sprint"));
+    }
+
+    #[test]
+    fn test_event_serialize_parse_roundtrip() {
+        // Roundtrip test: serialize an event, then parse it back
+        let original = Event {
+            schema: "event/v1".to_string(),
+            id: "evt-roundtrip-test".to_string(),
+            type_: "meeting".to_string(),
+            subtype: Some("standup".to_string()),
+            time: EventTime {
+                start: Utc.with_ymd_and_hms(2026, 3, 31, 10, 0, 0).unwrap(),
+                end: Some(Utc.with_ymd_and_hms(2026, 3, 31, 11, 0, 0).unwrap()),
+                timezone: "UTC".to_string(),
+            },
+            created_at: Some(Utc.with_ymd_and_hms(2026, 3, 30, 8, 0, 0).unwrap()),
+            ingested_at: None,
+            source: EventSource {
+                device: Some("macbook".to_string()),
+                channel: None,
+                capture_agent: None,
+            },
+            confidence: 0.85,
+            entities: EventEntities::default(),
+            tags: vec!["test".to_string()],
+            raw_refs: RawRefs { files: vec![] },
+            derived_refs: DerivedRefs {
+                transcript: None,
+                embedding: None,
+            },
+            ai: EventAi {
+                summary: Some("Test summary".to_string()),
+                extended: None,
+                topics: vec!["testing".to_string()],
+                sentiment: None,
+                extraction_version: None,
+            },
+            relations: EventRelations {
+                inferred_from: vec!["evt-previous".to_string()],
+            },
+            graph_hints: GraphHints {
+                importance: Some(0.9),
+                recurrence: false,
+            },
+            schema_version: 1,
+        };
+
+        let yaml = EventSerializer.serialize(&original).unwrap();
+        let parsed = EventParser::parse(&yaml).unwrap();
+
+        assert_eq!(parsed.id, original.id);
+        assert_eq!(parsed.type_, original.type_);
+        assert_eq!(parsed.subtype, original.subtype);
+        assert_eq!(parsed.confidence, original.confidence);
+        assert_eq!(parsed.tags, original.tags);
+        // Block scalar (>) adds trailing newline when parsed, so trim for comparison
+        assert_eq!(
+            parsed.ai.summary.as_deref().map(str::trim_end),
+            original.ai.summary.as_deref()
+        );
+        assert_eq!(
+            parsed.relations.inferred_from,
+            original.relations.inferred_from
+        );
+    }
+
+    // =============================================================================
+    // EntitySerializer Tests
+    // =============================================================================
+
+    #[test]
+    fn test_serialize_entity_minimal() {
+        let entity = Entity {
+            schema: "entity/v1".to_string(),
+            id: "ent-person-john".to_string(),
+            type_: EntityType::Person,
+            label: "John Doe".to_string(),
+            aliases: vec![],
+            status: EntityStatus::Active,
+            confidence: 0.5,
+            classification: EntityClassification::default(),
+            identity: EntityIdentity::default(),
+            multimedia: EntityMultimedia::default(),
+            links: EntityLinks::default(),
+            evolution: EntityEvolution::default(),
+            metrics: EntityMetrics::default(),
+            created_at: None,
+            updated_at: None,
+            schema_version: 1,
+        };
+
+        let yaml = EntitySerializer.serialize(&entity).unwrap();
+        assert!(yaml.contains("id: ent-person-john"));
+        assert!(yaml.contains("type: person"));
+        assert!(yaml.contains("label: John Doe"));
+        assert!(yaml.contains("status: active"));
+    }
+
+    #[test]
+    fn test_serialize_entity_aliases_and_status() {
+        // Tests aliases list and different status values
+        let entity = Entity {
+            schema: "entity/v1".to_string(),
+            id: "ent-person-john".to_string(),
+            type_: EntityType::Person,
+            label: "John Doe".to_string(),
+            aliases: vec!["Johnny".to_string(), "John D".to_string()],
+            status: EntityStatus::Archived,
+            confidence: 0.75,
+            classification: EntityClassification::default(),
+            identity: EntityIdentity::default(),
+            multimedia: EntityMultimedia::default(),
+            links: EntityLinks::default(),
+            evolution: EntityEvolution::default(),
+            metrics: EntityMetrics::default(),
+            created_at: None,
+            updated_at: None,
+            schema_version: 1,
+        };
+
+        let yaml = EntitySerializer.serialize(&entity).unwrap();
+        assert!(yaml.contains("aliases:"));
+        assert!(yaml.contains("  - Johnny"));
+        assert!(yaml.contains("  - John D"));
+        assert!(yaml.contains("status: archived"));
+    }
+
+    #[test]
+    fn test_serialize_entity_full() {
+        // Tests all major fields of Entity serialization
+        let entity = Entity {
+            schema: "entity/v1".to_string(),
+            id: "ent-org-acme".to_string(),
+            type_: EntityType::Organization,
+            label: "Acme Corp".to_string(),
+            aliases: vec!["Acme".to_string()],
+            status: EntityStatus::Active,
+            confidence: 0.95,
+            classification: EntityClassification {
+                domain: Some("technology".to_string()),
+                parent: vec!["ent-org-parent".to_string()],
+            },
+            identity: EntityIdentity {
+                description: Some("A leading tech company\nfounded in 2020".to_string()),
+                summary: Some("Innovation leader".to_string()),
+            },
+            multimedia: EntityMultimedia {
+                images: vec!["/img/acme-logo.jpg".to_string()],
+                voices: vec!["/audio/acme-intro.mp3".to_string()],
+                embeddings_text: Some("emb-acme-001".to_string()),
+            },
+            links: EntityLinks {
+                wikipedia: Some("https://en.wikipedia.org/wiki/Acme".to_string()),
+                papers: vec!["https://arxiv.org/abs/1234.5678".to_string()],
+                custom: std::collections::HashMap::new(),
+            },
+            evolution: EntityEvolution {
+                merged_from: vec!["ent-old-acme".to_string()],
+                split_to: vec![],
+            },
+            metrics: EntityMetrics {
+                event_count: 42,
+                last_seen: Some(Utc.with_ymd_and_hms(2026, 3, 31, 12, 0, 0).unwrap()),
+                activity_score: Some(0.85),
+            },
+            created_at: Some(Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap()),
+            updated_at: None,
+            schema_version: 1,
+        };
+
+        let yaml = EntitySerializer.serialize(&entity).unwrap();
+
+        // Verify entity type
+        assert!(yaml.contains("type: organization"));
+
+        // Verify block scalar for description
+        assert!(yaml.contains("description: >"));
+        assert!(yaml.contains("A leading tech company"));
+
+        // Verify nested lists
+        assert!(yaml.contains("  images:"));
+        assert!(yaml.contains("    - /img/acme-logo.jpg"));
+        assert!(yaml.contains("  voices:"));
+        assert!(yaml.contains("    - /audio/acme-intro.mp3"));
+
+        // Verify evolution
+        assert!(yaml.contains("merged_from:"));
+        assert!(yaml.contains("  - ent-old-acme"));
+    }
+
+    #[test]
+    fn test_entity_serialize_parse_roundtrip() {
+        // Roundtrip test: serialize an entity, then parse it back
+        let original = Entity {
+            schema: "entity/v1".to_string(),
+            id: "ent-roundtrip-test".to_string(),
+            type_: EntityType::Person,
+            label: "Test Person".to_string(),
+            aliases: vec!["Alias1".to_string(), "Alias2".to_string()],
+            status: EntityStatus::Merged,
+            confidence: 0.75,
+            classification: EntityClassification {
+                domain: Some("technology".to_string()),
+                parent: vec!["ent-org-acme".to_string()],
+            },
+            identity: EntityIdentity {
+                description: Some("A test person".to_string()),
+                summary: Some("Test summary".to_string()),
+            },
+            multimedia: EntityMultimedia {
+                images: vec!["/img/test.jpg".to_string()],
+                voices: vec![],
+                embeddings_text: Some("emb-test".to_string()),
+            },
+            links: EntityLinks {
+                wikipedia: Some("https://example.com".to_string()),
+                papers: vec!["https://paper.example.com".to_string()],
+                custom: std::collections::HashMap::new(),
+            },
+            evolution: EntityEvolution {
+                merged_from: vec!["ent-old-1".to_string()],
+                split_to: vec!["ent-new-1".to_string()],
+            },
+            metrics: EntityMetrics {
+                event_count: 10,
+                last_seen: Some(Utc.with_ymd_and_hms(2026, 3, 31, 12, 0, 0).unwrap()),
+                activity_score: Some(0.5),
+            },
+            created_at: Some(Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap()),
+            updated_at: None,
+            schema_version: 1,
+        };
+
+        let yaml = EntitySerializer.serialize(&original).unwrap();
+        let parsed = EntityParser::parse(&yaml).unwrap();
+
+        assert_eq!(parsed.id, original.id);
+        assert_eq!(parsed.type_, original.type_);
+        assert_eq!(parsed.label, original.label);
+        assert_eq!(parsed.aliases, original.aliases);
+        assert!(matches!(parsed.status, EntityStatus::Merged));
+        assert_eq!(parsed.confidence, original.confidence);
+        assert_eq!(parsed.classification.domain, original.classification.domain);
+        // Block scalar (>) adds trailing newline when parsed, so trim for comparison
+        assert_eq!(
+            parsed.identity.description.as_deref().map(str::trim_end),
+            original.identity.description.as_deref()
+        );
+        assert_eq!(
+            parsed.identity.summary.as_deref().map(str::trim_end),
+            original.identity.summary.as_deref()
+        );
+        assert_eq!(parsed.multimedia.images, original.multimedia.images);
+        assert_eq!(parsed.links.wikipedia, original.links.wikipedia);
+        assert_eq!(parsed.evolution.merged_from, original.evolution.merged_from);
+        assert_eq!(parsed.evolution.split_to, original.evolution.split_to);
+        assert_eq!(parsed.metrics.event_count, original.metrics.event_count);
+    }
+
+    #[test]
+    fn test_serialize_entity_all_statuses() {
+        // Verify each EntityStatus variant serializes correctly via Display
+        for (status, expected) in [
+            (EntityStatus::Active, "active"),
+            (EntityStatus::Archived, "archived"),
+            (EntityStatus::Merged, "merged"),
+        ] {
+            let entity = Entity {
+                schema: "entity/v1".to_string(),
+                id: "ent-status-test".to_string(),
+                type_: EntityType::Topic,
+                label: "Status Test".to_string(),
+                aliases: vec![],
+                status,
+                confidence: 0.5,
+                classification: EntityClassification::default(),
+                identity: EntityIdentity::default(),
+                multimedia: EntityMultimedia::default(),
+                links: EntityLinks::default(),
+                evolution: EntityEvolution::default(),
+                metrics: EntityMetrics::default(),
+                created_at: None,
+                updated_at: None,
+                schema_version: 1,
+            };
+
+            let yaml = EntitySerializer.serialize(&entity).unwrap();
+            assert!(
+                yaml.contains(&format!("status: {}", expected)),
+                "Expected status '{}' but not found in: {}",
+                expected,
+                yaml
+            );
+        }
     }
 }
