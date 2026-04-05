@@ -1,5 +1,6 @@
 //! Entity model
 
+use crate::models::event::{default_confidence, default_schema_version};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -145,12 +146,8 @@ pub struct Entity {
     pub schema_version: i32,
 }
 
-fn default_confidence() -> f64 {
-    0.5
-}
-
-fn default_schema_version() -> i32 {
-    1
+pub fn default_entity_schema() -> String {
+    format!("entity/v{}", crate::models::event::default_schema_version())
 }
 
 impl EntityType {

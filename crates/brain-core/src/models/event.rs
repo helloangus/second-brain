@@ -26,7 +26,7 @@ pub struct EventTime {
     pub timezone: String,
 }
 
-fn default_timezone() -> String {
+pub fn default_timezone() -> String {
     "UTC".to_string()
 }
 
@@ -148,13 +148,19 @@ pub struct Event {
     pub schema_version: i32,
 }
 
-fn default_confidence() -> f64 {
+pub fn default_confidence() -> f64 {
     0.5
 }
 
-fn default_schema_version() -> i32 {
+pub fn default_schema_version() -> i32 {
     1
 }
+
+pub fn default_schema() -> String {
+    format!("event/v{}", default_schema_version())
+}
+
+pub const DEFAULT_EVENT_TYPE: &str = "observation";
 
 impl Event {
     /// Generate a new event ID
