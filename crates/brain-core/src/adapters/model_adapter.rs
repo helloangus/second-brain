@@ -12,28 +12,8 @@ pub struct RawDataInput {
     pub path: String,
     #[serde(default)]
     pub metadata: std::collections::HashMap<String, String>,
-    /// Dictionary context for AI to prefer existing values
+    /// Dictionary set for AI Step 2 alignment
     #[serde(default)]
-    pub dict_context: Option<DictContext>,
-}
-
-/// Dictionary context for AI analysis
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DictContext {
-    /// Event type keys for backward compatibility
-    #[serde(default)]
-    pub event_types: Vec<String>,
-    /// Event subtype keys for backward compatibility
-    #[serde(default)]
-    pub event_subtypes: Vec<String>,
-    /// Tag keys for backward compatibility
-    #[serde(default)]
-    pub tags: Vec<String>,
-    /// Topic keys for backward compatibility
-    #[serde(default)]
-    pub topics: Vec<String>,
-    /// Full dictionary set for Step 2 alignment (not serialized, set at runtime)
-    #[serde(skip)]
     pub dict_set: Option<DictSet>,
 }
 

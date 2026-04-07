@@ -260,7 +260,7 @@ impl Dict {
 ///
 /// Provides convenient access to all seven dictionary types:
 /// device, channel, capture_agent, event_type, event_subtype, tags, topics.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictSet {
     /// Hardware devices (desktop, laptop, mobile, tablet, server, cloud)
     pub device: Dict,
