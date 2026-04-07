@@ -2,10 +2,11 @@
 
 use crate::adapters::{
     AnalysisOutput, AnalysisOutputWithNewEntries, ModelAdapter, NewDictEntries, RawDataInput,
-    RawDataType,
+    RawDataType, SummarizeAdapter,
 };
 use crate::dicts::DictSet;
 use crate::error::{Error, Result};
+use crate::models::TaskType;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{debug, error};
@@ -26,17 +27,6 @@ struct OllamaRequest {
 #[derive(Debug, Deserialize)]
 struct OllamaResponse {
     response: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct OllamaEmbedRequest {
-    model: String,
-    prompt: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OllamaEmbedResponse {
-    embedding: Vec<f32>,
 }
 
 /// Step 1 output - freely analyzed without dictionary constraints
@@ -125,7 +115,21 @@ impl ModelAdapter for OllamaAdapter {
         vec![RawDataType::Text, RawDataType::Image, RawDataType::Document]
     }
 
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
+    fn supported_task_types(&self) -> Vec<TaskType> {
+        vec![TaskType::Summarize]
+    }
+
+    fn health_check(&self) -> Result<bool> {
+        let url = format!("{}/api/tags", self.endpoint);
+        match ureq::get(&url).call() {
+            Ok(response) => Ok(response.status() < 400),
+            Err(_) => Ok(false),
+        }
+    }
+}
+
+impl SummarizeAdapter for OllamaAdapter {
+    fn summarize(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
         // Read file content
         let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
         let truncated_content = content.chars().take(2000).collect::<String>();
@@ -276,37 +280,6 @@ impl ModelAdapter for OllamaAdapter {
             analysis,
             new_entries: step2.new_entries,
         })
-    }
-
-    fn summarize(&self, text: &str) -> Result<String> {
-        let prompt = format!("用2-3句话总结以下文本:\n\n{}", text);
-
-        let request = OllamaRequest {
-            model: self.model.clone(),
-            prompt,
-            stream: false,
-        };
-
-        let response: OllamaResponse = self.post("api/generate", &request)?;
-        Ok(response.response)
-    }
-
-    fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let request = OllamaEmbedRequest {
-            model: self.model.clone(),
-            prompt: text.to_string(),
-        };
-
-        let response: OllamaEmbedResponse = self.post("api/embeddings", &request)?;
-        Ok(response.embedding)
-    }
-
-    fn health_check(&self) -> Result<bool> {
-        let url = format!("{}/api/tags", self.endpoint);
-        match ureq::get(&url).call() {
-            Ok(response) => Ok(response.status() < 400),
-            Err(_) => Ok(false),
-        }
     }
 }
 

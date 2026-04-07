@@ -2,9 +2,11 @@
 
 use crate::adapters::{
     AnalysisOutputWithNewEntries, ModelAdapter, NewDictEntries, RawDataInput, RawDataType,
+    SummarizeAdapter,
 };
 use crate::dicts::DictSet;
 use crate::error::{Error, Result};
+use crate::models::TaskType;
 use serde::{Deserialize, Serialize};
 
 /// OpenAI adapter for cloud LLM inference
@@ -81,7 +83,17 @@ impl ModelAdapter for OpenAIAdapter {
         vec![RawDataType::Text, RawDataType::Image, RawDataType::Document]
     }
 
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
+    fn supported_task_types(&self) -> Vec<TaskType> {
+        vec![TaskType::Summarize]
+    }
+
+    fn health_check(&self) -> Result<bool> {
+        Ok(true)
+    }
+}
+
+impl SummarizeAdapter for OpenAIAdapter {
+    fn summarize(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
         let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
         let truncated_content = content.chars().take(2000).collect::<String>();
 
@@ -255,60 +267,6 @@ impl ModelAdapter for OpenAIAdapter {
             analysis,
             new_entries: step2.new_entries,
         })
-    }
-
-    fn summarize(&self, text: &str) -> Result<String> {
-        let request = OpenAIRequest {
-            model: self.model.clone(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: format!("用2-3句话总结以下文本:\n\n{}", text),
-            }],
-            temperature: 0.7,
-        };
-
-        let response: OpenAIResponse = self.post("chat/completions", &request)?;
-
-        Ok(response
-            .choices
-            .first()
-            .map(|c| c.message.content.clone())
-            .unwrap_or_default())
-    }
-
-    fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        #[derive(Serialize)]
-        struct EmbedRequest {
-            model: String,
-            input: String,
-        }
-
-        #[derive(Deserialize)]
-        struct EmbedResponse {
-            data: Vec<EmbedData>,
-        }
-
-        #[derive(Deserialize)]
-        struct EmbedData {
-            embedding: Vec<f32>,
-        }
-
-        let request = EmbedRequest {
-            model: "text-embedding-3-small".to_string(),
-            input: text.to_string(),
-        };
-
-        let response: EmbedResponse = self.post("embeddings", &request)?;
-
-        Ok(response
-            .data
-            .first()
-            .map(|d| d.embedding.clone())
-            .unwrap_or_default())
-    }
-
-    fn health_check(&self) -> Result<bool> {
-        Ok(true)
     }
 }
 

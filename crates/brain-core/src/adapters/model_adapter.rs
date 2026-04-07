@@ -2,7 +2,7 @@
 
 use crate::dicts::{DictEntry, DictSet};
 use crate::error::Result;
-use crate::models::RawDataType;
+use crate::models::{RawDataType, TaskType};
 use serde::{Deserialize, Serialize};
 
 /// Input for model analysis
@@ -61,7 +61,7 @@ pub struct AnalysisOutput {
     pub raw_response: serde_json::Value,
 }
 
-/// Model adapter trait - all AI models must implement this
+/// Model adapter trait - base trait for all AI models
 pub trait ModelAdapter: Send + Sync {
     /// Get the name of this adapter
     fn name(&self) -> &str;
@@ -69,25 +69,18 @@ pub trait ModelAdapter: Send + Sync {
     /// Get supported raw data types for this adapter
     fn supported_data_types(&self) -> Vec<RawDataType>;
 
-    /// Check if this adapter supports the given data type
-    fn supports(&self, data_type: &RawDataType) -> bool {
-        self.supported_data_types().contains(data_type)
-    }
-
-    /// Analyze raw data with two-step process (free analysis + dictionary alignment)
-    /// Returns analysis output along with any new dictionary entries discovered
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
-
-    /// Generate a summary of text content
-    fn summarize(&self, text: &str) -> Result<String>;
-
-    /// Generate embeddings for text
-    fn embed(&self, text: &str) -> Result<Vec<f32>>;
+    /// Get supported task types for this adapter
+    fn supported_task_types(&self) -> Vec<TaskType>;
 
     /// Health check - verify the model is reachable
-    fn health_check(&self) -> Result<bool> {
-        Ok(true)
-    }
+    fn health_check(&self) -> Result<bool>;
+}
+
+/// Summarize adapter trait - for models that support Summarize task type
+pub trait SummarizeAdapter: ModelAdapter {
+    /// Summarize raw data with two-step process (free analysis + dictionary alignment)
+    /// Returns analysis output along with any new dictionary entries discovered
+    fn summarize(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
 }
 
 /// Configuration for creating adapters
@@ -155,7 +148,7 @@ impl AdapterConfig {
 }
 
 /// Factory for creating model adapters
-pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
+pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn SummarizeAdapter>> {
     match config.adapter_type.as_str() {
         "ollama" => {
             let endpoint = config
@@ -164,7 +157,7 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
             Ok(
                 Box::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
-                    as Box<dyn ModelAdapter>,
+                    as Box<dyn SummarizeAdapter>,
             )
         }
         "openai" => {
@@ -174,7 +167,7 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 .ok_or_else(|| crate::Error::Config("OpenAI API key required".to_string()))?;
             Ok(
                 Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
-                    as Box<dyn ModelAdapter>,
+                    as Box<dyn SummarizeAdapter>,
             )
         }
         "minimax" => {
@@ -191,7 +184,7 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 &config.default_model,
                 &endpoint,
                 config.thinking,
-            )?) as Box<dyn ModelAdapter>)
+            )?) as Box<dyn SummarizeAdapter>)
         }
         _ => Err(crate::Error::Config(format!(
             "Unknown adapter type: {}",

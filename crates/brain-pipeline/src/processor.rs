@@ -1,7 +1,7 @@
 //! Task processor
 
 use crate::builder::EventBuilder;
-use brain_core::adapters::{create_adapter, AdapterConfig, ModelAdapter, RawDataInput};
+use brain_core::adapters::{create_adapter, AdapterConfig, RawDataInput, SummarizeAdapter};
 use brain_core::{BrainConfig, DictSet, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;
@@ -187,7 +187,7 @@ fn load_dict_context(dicts_path: &std::path::Path) -> DictSet {
 
 fn process_task_sync(
     task: &PipelineTask,
-    adapter: &dyn ModelAdapter,
+    adapter: &dyn SummarizeAdapter,
     config: &BrainConfig,
 ) -> Result<(), PipelineError> {
     use std::path::Path;
@@ -217,8 +217,8 @@ fn process_task_sync(
     let analysis_result: Result<
         (brain_core::adapters::AnalysisOutputWithNewEntries, DictSet),
         PipelineError,
-    > = if adapter.supports(&task.data_type()) {
-        match adapter.analyze(&input) {
+    > = if adapter.supported_task_types().contains(&task.task) {
+        match adapter.summarize(&input) {
             Ok(result) => {
                 let ai_elapsed = ai_start.elapsed();
                 let ai_duration_ms = ai_elapsed.as_millis() as u64;
