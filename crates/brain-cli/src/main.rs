@@ -56,10 +56,10 @@ enum Commands {
         #[arg(short, long, default_value = "CLI")]
         source: String,
         /// Device type
-        #[arg(short, long, default_value = "PC")]
+        #[arg(short, long, default_value = "desktop")]
         device: String,
         /// Capture agent
-        #[arg(short, long, default_value = "manual_entry")]
+        #[arg(short, long, default_value = "manual")]
         agent: String,
         /// Data type (text, image, audio, video, document)
         #[arg(short, long, default_value = "text")]

@@ -1,9 +1,9 @@
 //! OpenAI adapter implementation
 
 use crate::adapters::{
-    AnalysisOutputWithNewEntries, DictContext, ModelAdapter, NewDictEntries, RawDataInput,
-    RawDataType,
+    AnalysisOutputWithNewEntries, ModelAdapter, NewDictEntries, RawDataInput, RawDataType,
 };
+use crate::dicts::DictSet;
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -151,8 +151,8 @@ impl ModelAdapter for OpenAIAdapter {
             .map_err(|e| Error::Config(format!("Step1 parse error: {}", e)))?;
 
         // === STEP 2: Dictionary-aligned analysis ===
-        let dict_context_str = if let Some(ref ctx) = input.dict_context {
-            Self::build_dict_context(ctx)
+        let dict_context_str = if let Some(ref dict_set) = input.dict_set {
+            Self::build_dict_context(dict_set)
         } else {
             String::new()
         };
@@ -314,118 +314,99 @@ impl ModelAdapter for OpenAIAdapter {
 
 impl OpenAIAdapter {
     /// Build dictionary context string for Step 2 prompt
-    pub fn build_dict_context(ctx: &DictContext) -> String {
+    pub fn build_dict_context(dict_set: &DictSet) -> String {
         let mut parts = Vec::new();
 
         // Event Types
-        if let Some(ref dict_set) = ctx.dict_set {
-            let entries: Vec<String> = dict_set
-                .event_type
-                .list()
-                .iter()
-                .map(|e| {
-                    let zh = e.zh.as_deref().unwrap_or("");
-                    let desc = e.description.as_deref().unwrap_or("");
-                    if zh.is_empty() && desc.is_empty() {
-                        format!("  - {}", e.key)
-                    } else if zh.is_empty() {
-                        format!("  - {}: {}", e.key, desc)
-                    } else if desc.is_empty() {
-                        format!("  - {} ({})", e.key, zh)
-                    } else {
-                        format!("  - {} ({}): {}", e.key, zh, desc)
-                    }
-                })
-                .collect();
-            if !entries.is_empty() {
-                parts.push(format!("事件类型:\n{}", entries.join("\n")));
-            }
+        let entries: Vec<String> = dict_set
+            .event_type
+            .list()
+            .iter()
+            .map(|e| {
+                let zh = e.zh.as_deref().unwrap_or("");
+                let desc = e.description.as_deref().unwrap_or("");
+                if zh.is_empty() && desc.is_empty() {
+                    format!("  - {}", e.key)
+                } else if zh.is_empty() {
+                    format!("  - {}: {}", e.key, desc)
+                } else if desc.is_empty() {
+                    format!("  - {} ({})", e.key, zh)
+                } else {
+                    format!("  - {} ({}): {}", e.key, zh, desc)
+                }
+            })
+            .collect();
+        if !entries.is_empty() {
+            parts.push(format!("事件类型:\n{}", entries.join("\n")));
+        }
 
-            // Event Subtypes
-            let entries: Vec<String> = dict_set
-                .event_subtype
-                .list()
-                .iter()
-                .map(|e| {
-                    let zh = e.zh.as_deref().unwrap_or("");
-                    let desc = e.description.as_deref().unwrap_or("");
-                    if zh.is_empty() && desc.is_empty() {
-                        format!("  - {}", e.key)
-                    } else if zh.is_empty() {
-                        format!("  - {}: {}", e.key, desc)
-                    } else if desc.is_empty() {
-                        format!("  - {} ({})", e.key, zh)
-                    } else {
-                        format!("  - {} ({}): {}", e.key, zh, desc)
-                    }
-                })
-                .collect();
-            if !entries.is_empty() {
-                parts.push(format!("事件子类型:\n{}", entries.join("\n")));
-            }
+        // Event Subtypes
+        let entries: Vec<String> = dict_set
+            .event_subtype
+            .list()
+            .iter()
+            .map(|e| {
+                let zh = e.zh.as_deref().unwrap_or("");
+                let desc = e.description.as_deref().unwrap_or("");
+                if zh.is_empty() && desc.is_empty() {
+                    format!("  - {}", e.key)
+                } else if zh.is_empty() {
+                    format!("  - {}: {}", e.key, desc)
+                } else if desc.is_empty() {
+                    format!("  - {} ({})", e.key, zh)
+                } else {
+                    format!("  - {} ({}): {}", e.key, zh, desc)
+                }
+            })
+            .collect();
+        if !entries.is_empty() {
+            parts.push(format!("事件子类型:\n{}", entries.join("\n")));
+        }
 
-            // Tags
-            let entries: Vec<String> = dict_set
-                .tags
-                .list()
-                .iter()
-                .map(|e| {
-                    let zh = e.zh.as_deref().unwrap_or("");
-                    let desc = e.description.as_deref().unwrap_or("");
-                    if zh.is_empty() && desc.is_empty() {
-                        format!("  - {}", e.key)
-                    } else if zh.is_empty() {
-                        format!("  - {}: {}", e.key, desc)
-                    } else if desc.is_empty() {
-                        format!("  - {} ({})", e.key, zh)
-                    } else {
-                        format!("  - {} ({}): {}", e.key, zh, desc)
-                    }
-                })
-                .collect();
-            if !entries.is_empty() {
-                parts.push(format!("标签:\n{}", entries.join("\n")));
-            }
+        // Tags
+        let entries: Vec<String> = dict_set
+            .tags
+            .list()
+            .iter()
+            .map(|e| {
+                let zh = e.zh.as_deref().unwrap_or("");
+                let desc = e.description.as_deref().unwrap_or("");
+                if zh.is_empty() && desc.is_empty() {
+                    format!("  - {}", e.key)
+                } else if zh.is_empty() {
+                    format!("  - {}: {}", e.key, desc)
+                } else if desc.is_empty() {
+                    format!("  - {} ({})", e.key, zh)
+                } else {
+                    format!("  - {} ({}): {}", e.key, zh, desc)
+                }
+            })
+            .collect();
+        if !entries.is_empty() {
+            parts.push(format!("标签:\n{}", entries.join("\n")));
+        }
 
-            // Topics
-            let entries: Vec<String> = dict_set
-                .topics
-                .list()
-                .iter()
-                .map(|e| {
-                    let zh = e.zh.as_deref().unwrap_or("");
-                    let desc = e.description.as_deref().unwrap_or("");
-                    if zh.is_empty() && desc.is_empty() {
-                        format!("  - {}", e.key)
-                    } else if zh.is_empty() {
-                        format!("  - {}: {}", e.key, desc)
-                    } else if desc.is_empty() {
-                        format!("  - {} ({})", e.key, zh)
-                    } else {
-                        format!("  - {} ({}): {}", e.key, zh, desc)
-                    }
-                })
-                .collect();
-            if !entries.is_empty() {
-                parts.push(format!("主题:\n{}", entries.join("\n")));
-            }
-        } else {
-            // Fallback: use the old Vec<String> fields
-            if !ctx.event_types.is_empty() {
-                parts.push(format!("Event Types:\n  {}", ctx.event_types.join(", ")));
-            }
-            if !ctx.event_subtypes.is_empty() {
-                parts.push(format!(
-                    "Event Subtypes:\n  {}",
-                    ctx.event_subtypes.join(", ")
-                ));
-            }
-            if !ctx.tags.is_empty() {
-                parts.push(format!("Tags:\n  {}", ctx.tags.join(", ")));
-            }
-            if !ctx.topics.is_empty() {
-                parts.push(format!("Topics:\n  {}", ctx.topics.join(", ")));
-            }
+        // Topics
+        let entries: Vec<String> = dict_set
+            .topics
+            .list()
+            .iter()
+            .map(|e| {
+                let zh = e.zh.as_deref().unwrap_or("");
+                let desc = e.description.as_deref().unwrap_or("");
+                if zh.is_empty() && desc.is_empty() {
+                    format!("  - {}", e.key)
+                } else if zh.is_empty() {
+                    format!("  - {}: {}", e.key, desc)
+                } else if desc.is_empty() {
+                    format!("  - {} ({})", e.key, zh)
+                } else {
+                    format!("  - {} ({}): {}", e.key, zh, desc)
+                }
+            })
+            .collect();
+        if !entries.is_empty() {
+            parts.push(format!("主题:\n{}", entries.join("\n")));
         }
 
         if parts.is_empty() {

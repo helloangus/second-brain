@@ -1,9 +1,7 @@
 //! Task processor
 
 use crate::builder::EventBuilder;
-use brain_core::adapters::{
-    create_adapter, AdapterConfig, DictContext, ModelAdapter, RawDataInput,
-};
+use brain_core::adapters::{create_adapter, AdapterConfig, ModelAdapter, RawDataInput};
 use brain_core::{BrainConfig, DictSet, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;
@@ -182,21 +180,9 @@ pub async fn process_queue(
     Ok(())
 }
 
-/// Load dictionary context for AI prompts
-fn load_dict_context(dicts_path: &std::path::Path) -> (DictContext, DictSet) {
-    match DictSet::load(dicts_path) {
-        Ok(dicts) => (
-            DictContext {
-                event_types: dicts.event_type.keys().into_iter().cloned().collect(),
-                event_subtypes: dicts.event_subtype.keys().into_iter().cloned().collect(),
-                tags: dicts.tags.keys().into_iter().cloned().collect(),
-                topics: dicts.topics.keys().into_iter().cloned().collect(),
-                dict_set: Some(dicts.clone()),
-            },
-            dicts,
-        ),
-        Err(_) => (DictContext::default(), DictSet::default_dicts()),
-    }
+/// Load dictionary set for AI prompts
+fn load_dict_context(dicts_path: &std::path::Path) -> DictSet {
+    DictSet::load(dicts_path).unwrap_or_else(|_| DictSet::default_dicts())
 }
 
 fn process_task_sync(
@@ -214,14 +200,14 @@ fn process_task_sync(
     };
 
     // Load dictionaries for AI context (includes full DictSet for Step 2)
-    let (dict_context, dicts) = load_dict_context(&config.dicts_path);
+    let dicts = load_dict_context(&config.dicts_path);
 
     // Create input for the adapter
     let input = RawDataInput {
         data_type: task.data_type(),
         path: input_path.to_string_lossy().to_string(),
         metadata: task.input.metadata.clone(),
-        dict_context: Some(dict_context),
+        dict_set: Some(dicts.clone()),
     };
 
     // Analyze the data
