@@ -2,7 +2,7 @@
 
 use crate::adapters::{
     AnalysisOutputWithNewEntries, ModelAdapter, NewDictEntries, RawDataInput, RawDataType,
-    SummarizeAdapter,
+    ReasoningAdapter, SummarizeAdapter,
 };
 use crate::dicts::DictSet;
 use crate::error::{Error, Result};
@@ -168,11 +168,26 @@ impl ModelAdapter for MiniMaxAdapter {
     }
 
     fn supported_task_types(&self) -> Vec<TaskType> {
-        vec![TaskType::Summarize]
+        vec![TaskType::Summarize, TaskType::Reasoning]
     }
 
     fn health_check(&self) -> Result<bool> {
         Ok(true)
+    }
+
+    fn analyze(
+        &self,
+        task: TaskType,
+        input: &RawDataInput,
+    ) -> Result<AnalysisOutputWithNewEntries> {
+        match task {
+            TaskType::Summarize => self.summarize(input),
+            TaskType::Reasoning => self.reason(input),
+            _ => Err(Error::Config(format!(
+                "MiniMaxAdapter does not support {:?}",
+                task
+            ))),
+        }
     }
 }
 
@@ -350,6 +365,194 @@ impl SummarizeAdapter for MiniMaxAdapter {
             .map_err(|e| Error::Config(format!("Step2 parse error: {}", e)))?;
 
         // Build final output
+        let analysis = crate::adapters::AnalysisOutput {
+            summary: step2.final_.summary,
+            extended: step2.final_.extended,
+            type_: step2.final_.type_,
+            subtype: step2.final_.subtype,
+            tags: step2.final_.tags,
+            topics: step2.final_.topics,
+            entities: step2.final_.entities,
+            confidence: step2.final_.confidence,
+            raw_response: serde_json::Value::String(step2_content.to_string()),
+        };
+
+        Ok(AnalysisOutputWithNewEntries {
+            analysis,
+            new_entries: step2.new_entries,
+        })
+    }
+}
+
+impl ReasoningAdapter for MiniMaxAdapter {
+    fn reason(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries> {
+        let content = std::fs::read_to_string(&input.path).map_err(Error::Io)?;
+        let truncated_content = content.chars().take(2000).collect::<String>();
+
+        // === STEP 1: Free reasoning analysis ===
+        let step1_prompt = format!(
+            r#"对以下内容进行深度推理分析:
+
+内容类型: {}
+内容: {}
+
+请提供:
+1. 简短摘要（2-3句话）
+2. 扩展内容 - 详细分析
+3. 事件类型
+4. 事件子类型
+5. 关键标签
+6. 关键主题
+7. 提到的任何实体
+
+请以JSON格式回复:
+{{
+    "summary": "简短摘要",
+    "extended": "详细内容",
+    "type": "事件类型",
+    "subtype": "子类型",
+    "tags": ["标签"],
+    "topics": ["主题"],
+    "entities": ["实体"],
+    "confidence": 0.0-1.0
+}}"#,
+            input.data_type, truncated_content
+        );
+
+        let thinking_config = if self.thinking {
+            Some(ThinkingConfig {
+                type_: "thinking".to_string(),
+                enabled: Some(true),
+            })
+        } else {
+            None
+        };
+
+        let step1_response: MiniMaxResponse = self.post(
+            "chat/completions",
+            &MiniMaxRequest {
+                model: self.model.clone(),
+                messages: vec![Message {
+                    role: "user".to_string(),
+                    content: step1_prompt,
+                }],
+                temperature: 0.7,
+                thinking: thinking_config.clone(),
+            },
+        )?;
+
+        let step1_content_raw = step1_response
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .unwrap_or_default();
+        let step1_content = Self::extract_json(&step1_content_raw);
+
+        #[derive(Deserialize, Serialize)]
+        struct Step1Output {
+            summary: Option<String>,
+            extended: Option<String>,
+            #[serde(rename = "type")]
+            type_: Option<String>,
+            subtype: Option<String>,
+            tags: Vec<String>,
+            topics: Vec<String>,
+            entities: Vec<String>,
+            #[serde(deserialize_with = "deserialize_number_or_string", default)]
+            confidence: Option<f64>,
+        }
+
+        let step1: Step1Output = serde_json::from_str(step1_content)
+            .map_err(|e| Error::Config(format!("Step1 parse error: {}", e)))?;
+
+        // === STEP 2: Dictionary-aligned analysis ===
+        let dict_context_str = if let Some(ref dict_set) = input.dict_set {
+            Self::build_dict_context(dict_set)
+        } else {
+            String::new()
+        };
+
+        let step2_prompt = format!(
+            r#"回顾你的初步推理分析，并与现有字典进行对齐。
+
+初步分析:
+{}
+
+现有字典:
+{}
+
+任务:
+对于每个字段（类型、子类型、标签、主题）:
+- 如果初步值匹配现有字典条目 → 使用现有条目（使用精确的key）
+- 如果初步值是新的（不在字典中）→ 保留它作为新值
+
+请以JSON格式回复:
+{{
+    "final": {{
+        "summary": "简短摘要",
+        "extended": "详细内容",
+        "type": "现有或新的事件类型",
+        "subtype": "现有或新的子类型",
+        "tags": ["标签"],
+        "topics": ["主题"],
+        "entities": ["实体"],
+        "confidence": 0.0-1.0
+    }},
+    "new_entries": {{
+        "event_types": [],
+        "event_subtypes": [],
+        "tags": [],
+        "topics": []
+    }}
+}}"#,
+            serde_json::to_string(&step1).unwrap_or_default(),
+            dict_context_str
+        );
+
+        let step2_response: MiniMaxResponse = self.post(
+            "chat/completions",
+            &MiniMaxRequest {
+                model: self.model.clone(),
+                messages: vec![Message {
+                    role: "user".to_string(),
+                    content: step2_prompt,
+                }],
+                temperature: 0.7,
+                thinking: thinking_config,
+            },
+        )?;
+
+        let step2_content_raw = step2_response
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .unwrap_or_default();
+        let step2_content = Self::extract_json(&step2_content_raw);
+
+        #[derive(Deserialize)]
+        struct Step2Final {
+            summary: Option<String>,
+            extended: Option<String>,
+            #[serde(rename = "type")]
+            type_: Option<String>,
+            subtype: Option<String>,
+            tags: Vec<String>,
+            topics: Vec<String>,
+            entities: Vec<String>,
+            #[serde(deserialize_with = "deserialize_number_or_string", default)]
+            confidence: Option<f64>,
+        }
+
+        #[derive(Deserialize)]
+        struct Step2Output {
+            #[serde(rename = "final")]
+            final_: Step2Final,
+            new_entries: NewDictEntries,
+        }
+
+        let step2: Step2Output = serde_json::from_str(step2_content)
+            .map_err(|e| Error::Config(format!("Step2 parse error: {}", e)))?;
+
         let analysis = crate::adapters::AnalysisOutput {
             summary: step2.final_.summary,
             extended: step2.final_.extended,

@@ -90,6 +90,20 @@ impl ModelAdapter for OpenAIAdapter {
     fn health_check(&self) -> Result<bool> {
         Ok(true)
     }
+
+    fn analyze(
+        &self,
+        task: TaskType,
+        input: &RawDataInput,
+    ) -> Result<AnalysisOutputWithNewEntries> {
+        match task {
+            TaskType::Summarize => self.summarize(input),
+            _ => Err(Error::Config(format!(
+                "OpenAIAdapter does not support {:?}",
+                task
+            ))),
+        }
+    }
 }
 
 impl SummarizeAdapter for OpenAIAdapter {

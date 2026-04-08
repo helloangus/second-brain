@@ -74,6 +74,10 @@ pub trait ModelAdapter: Send + Sync {
 
     /// Health check - verify the model is reachable
     fn health_check(&self) -> Result<bool>;
+
+    /// Analyze input data - dispatches to summarize or reason based on task type
+    fn analyze(&self, task: TaskType, input: &RawDataInput)
+        -> Result<AnalysisOutputWithNewEntries>;
 }
 
 /// Summarize adapter trait - for models that support Summarize task type
@@ -81,6 +85,13 @@ pub trait SummarizeAdapter: ModelAdapter {
     /// Summarize raw data with two-step process (free analysis + dictionary alignment)
     /// Returns analysis output along with any new dictionary entries discovered
     fn summarize(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
+}
+
+/// Reasoning adapter trait - for models that support Reasoning task type
+pub trait ReasoningAdapter: ModelAdapter {
+    /// Perform reasoning on raw data with two-step process (free analysis + dictionary alignment)
+    /// Returns analysis output along with any new dictionary entries discovered
+    fn reason(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
 }
 
 /// Configuration for creating adapters
@@ -147,8 +158,10 @@ impl AdapterConfig {
     }
 }
 
+use std::sync::Arc;
+
 /// Factory for creating model adapters
-pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn SummarizeAdapter>> {
+pub fn create_adapter(config: &AdapterConfig) -> Result<Arc<dyn ModelAdapter>> {
     match config.adapter_type.as_str() {
         "ollama" => {
             let endpoint = config
@@ -156,8 +169,8 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn SummarizeAdapter
                 .clone()
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
             Ok(
-                Box::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
-                    as Box<dyn SummarizeAdapter>,
+                Arc::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
+                    as Arc<dyn ModelAdapter>,
             )
         }
         "openai" => {
@@ -166,8 +179,8 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn SummarizeAdapter
                 .clone()
                 .ok_or_else(|| crate::Error::Config("OpenAI API key required".to_string()))?;
             Ok(
-                Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
-                    as Box<dyn SummarizeAdapter>,
+                Arc::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
+                    as Arc<dyn ModelAdapter>,
             )
         }
         "minimax" => {
@@ -179,12 +192,12 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn SummarizeAdapter
                 .endpoint
                 .clone()
                 .unwrap_or_else(|| "https://api.minimaxi.com/v1".to_string());
-            Ok(Box::new(super::MiniMaxAdapter::new(
+            Ok(Arc::new(super::MiniMaxAdapter::new(
                 &api_key,
                 &config.default_model,
                 &endpoint,
                 config.thinking,
-            )?) as Box<dyn SummarizeAdapter>)
+            )?) as Arc<dyn ModelAdapter>)
         }
         _ => Err(crate::Error::Config(format!(
             "Unknown adapter type: {}",

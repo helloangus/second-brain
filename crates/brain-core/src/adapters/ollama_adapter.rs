@@ -126,6 +126,20 @@ impl ModelAdapter for OllamaAdapter {
             Err(_) => Ok(false),
         }
     }
+
+    fn analyze(
+        &self,
+        task: TaskType,
+        input: &RawDataInput,
+    ) -> Result<AnalysisOutputWithNewEntries> {
+        match task {
+            TaskType::Summarize => self.summarize(input),
+            _ => Err(Error::Config(format!(
+                "OllamaAdapter does not support {:?}",
+                task
+            ))),
+        }
+    }
 }
 
 impl SummarizeAdapter for OllamaAdapter {
