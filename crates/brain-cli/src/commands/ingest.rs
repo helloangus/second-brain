@@ -1,7 +1,7 @@
 //! Ingest command - add files to the AI processing pipeline
 
 use brain_core::dicts::{prompt_selection, DictEntry};
-use brain_core::{BrainConfig, DictSet, RawDataType};
+use brain_core::{BrainConfig, DictSet, RawDataType, TaskType};
 use brain_pipeline::processor;
 use brain_pipeline::queue;
 use chrono::Utc;
@@ -12,6 +12,7 @@ use std::path::Path;
 ///
 /// Adds a file to the raw data lake and queues it for AI processing.
 /// If --process is specified, also runs the AI pipeline immediately.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute(
     config: &BrainConfig,
     file_path: &str,
@@ -19,6 +20,7 @@ pub async fn execute(
     device: &str,
     agent: &str,
     data_type: &str,
+    task_type: &str,
     process: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let path = Path::new(file_path);
@@ -67,6 +69,14 @@ pub async fn execute(
     if device_is_new || agent_is_new {
         dicts.save(&dicts_path)?;
         println!("Dictionaries updated.");
+    }
+
+    // Validate task_type against TaskType
+    if TaskType::from_str(task_type).is_none() {
+        return Err(format!(
+            "Invalid task type '{}'. Valid types: summarize, image_caption, ocr, asr, face_detection, speaker_diarization, embedding, reasoning",
+            task_type
+        ).into());
     }
 
     // Parse data type (default to text)
@@ -129,7 +139,7 @@ pub async fn execute(
 
     let task_id = queue::add_task(
         config,
-        "summarize",
+        task_type,
         relative_path.to_str().unwrap(),
         Some(source),
         Some(&resolved_device),
@@ -139,7 +149,7 @@ pub async fn execute(
     .await?;
 
     // Log queue add
-    let _ = logger.log_queue_add(&task_id, "summarize", relative_path.to_str().unwrap());
+    let _ = logger.log_queue_add(&task_id, task_type, relative_path.to_str().unwrap());
 
     // If --process flag set, run AI processing immediately
     if process {

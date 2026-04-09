@@ -2,8 +2,12 @@
 
 use crate::dicts::{DictEntry, DictSet};
 use crate::error::Result;
-use crate::models::RawDataType;
+use crate::models::{RawDataType, TaskType};
 use serde::{Deserialize, Serialize};
+
+/// Default maximum content length for AI analysis (2000 characters).
+/// Content exceeding this limit will be truncated before sending to the model.
+pub const DEFAULT_MAX_CONTENT_CHARS: usize = 2000;
 
 /// Input for model analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,29 +16,13 @@ pub struct RawDataInput {
     pub path: String,
     #[serde(default)]
     pub metadata: std::collections::HashMap<String, String>,
-    /// Dictionary context for AI to prefer existing values
+    /// Dictionary set for AI Step 2 alignment
     #[serde(default)]
-    pub dict_context: Option<DictContext>,
-}
-
-/// Dictionary context for AI analysis
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DictContext {
-    /// Event type keys for backward compatibility
-    #[serde(default)]
-    pub event_types: Vec<String>,
-    /// Event subtype keys for backward compatibility
-    #[serde(default)]
-    pub event_subtypes: Vec<String>,
-    /// Tag keys for backward compatibility
-    #[serde(default)]
-    pub tags: Vec<String>,
-    /// Topic keys for backward compatibility
-    #[serde(default)]
-    pub topics: Vec<String>,
-    /// Full dictionary set for Step 2 alignment (not serialized, set at runtime)
-    #[serde(skip)]
     pub dict_set: Option<DictSet>,
+    /// Maximum content length for AI analysis (truncates if exceeded).
+    /// If None, uses DEFAULT_MAX_CONTENT_CHARS (2000).
+    #[serde(default)]
+    pub max_chars: Option<usize>,
 }
 
 /// New dictionary entries discovered during analysis
@@ -81,7 +69,7 @@ pub struct AnalysisOutput {
     pub raw_response: serde_json::Value,
 }
 
-/// Model adapter trait - all AI models must implement this
+/// Model adapter trait - base trait for all AI models
 pub trait ModelAdapter: Send + Sync {
     /// Get the name of this adapter
     fn name(&self) -> &str;
@@ -89,25 +77,29 @@ pub trait ModelAdapter: Send + Sync {
     /// Get supported raw data types for this adapter
     fn supported_data_types(&self) -> Vec<RawDataType>;
 
-    /// Check if this adapter supports the given data type
-    fn supports(&self, data_type: &RawDataType) -> bool {
-        self.supported_data_types().contains(data_type)
-    }
-
-    /// Analyze raw data with two-step process (free analysis + dictionary alignment)
-    /// Returns analysis output along with any new dictionary entries discovered
-    fn analyze(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
-
-    /// Generate a summary of text content
-    fn summarize(&self, text: &str) -> Result<String>;
-
-    /// Generate embeddings for text
-    fn embed(&self, text: &str) -> Result<Vec<f32>>;
+    /// Get supported task types for this adapter
+    fn supported_task_types(&self) -> Vec<TaskType>;
 
     /// Health check - verify the model is reachable
-    fn health_check(&self) -> Result<bool> {
-        Ok(true)
-    }
+    fn health_check(&self) -> Result<bool>;
+
+    /// Analyze input data - dispatches to summarize or reason based on task type
+    fn analyze(&self, task: TaskType, input: &RawDataInput)
+        -> Result<AnalysisOutputWithNewEntries>;
+}
+
+/// Summarize adapter trait - for models that support Summarize task type
+pub trait SummarizeAdapter: ModelAdapter {
+    /// Summarize raw data with two-step process (free analysis + dictionary alignment)
+    /// Returns analysis output along with any new dictionary entries discovered
+    fn summarize(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
+}
+
+/// Reasoning adapter trait - for models that support Reasoning task type
+pub trait ReasoningAdapter: ModelAdapter {
+    /// Perform reasoning on raw data with two-step process (free analysis + dictionary alignment)
+    /// Returns analysis output along with any new dictionary entries discovered
+    fn reason(&self, input: &RawDataInput) -> Result<AnalysisOutputWithNewEntries>;
 }
 
 /// Configuration for creating adapters
@@ -118,7 +110,7 @@ pub struct AdapterConfig {
     pub endpoint: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
-    #[serde(default = "default_model")]
+    #[serde(default)]
     pub default_model: String,
     #[serde(default)]
     pub timeout_secs: u64,
@@ -127,55 +119,10 @@ pub struct AdapterConfig {
     pub thinking: bool,
 }
 
-fn default_model() -> String {
-    "llama3".to_string()
-}
-
-impl AdapterConfig {
-    /// Create an Ollama adapter config
-    pub fn ollama(endpoint: impl Into<String>, model: impl Into<String>) -> Self {
-        Self {
-            adapter_type: "ollama".to_string(),
-            endpoint: Some(endpoint.into()),
-            api_key: None,
-            default_model: model.into(),
-            timeout_secs: 60,
-            thinking: false,
-        }
-    }
-
-    /// Create an OpenAI adapter config
-    pub fn openai(api_key: impl Into<String>, model: impl Into<String>) -> Self {
-        Self {
-            adapter_type: "openai".to_string(),
-            endpoint: None,
-            api_key: Some(api_key.into()),
-            default_model: model.into(),
-            timeout_secs: 30,
-            thinking: false,
-        }
-    }
-
-    /// Create a MiniMax adapter config
-    pub fn minimax(
-        api_key: impl Into<String>,
-        model: impl Into<String>,
-        endpoint: impl Into<String>,
-        thinking: bool,
-    ) -> Self {
-        Self {
-            adapter_type: "minimax".to_string(),
-            endpoint: Some(endpoint.into()),
-            api_key: Some(api_key.into()),
-            default_model: model.into(),
-            timeout_secs: 60,
-            thinking,
-        }
-    }
-}
+use std::sync::Arc;
 
 /// Factory for creating model adapters
-pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
+pub fn create_adapter(config: &AdapterConfig) -> Result<Arc<dyn ModelAdapter>> {
     match config.adapter_type.as_str() {
         "ollama" => {
             let endpoint = config
@@ -183,18 +130,8 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 .clone()
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
             Ok(
-                Box::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
-                    as Box<dyn ModelAdapter>,
-            )
-        }
-        "openai" => {
-            let api_key = config
-                .api_key
-                .clone()
-                .ok_or_else(|| crate::Error::Config("OpenAI API key required".to_string()))?;
-            Ok(
-                Box::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
-                    as Box<dyn ModelAdapter>,
+                Arc::new(super::OllamaAdapter::new(&endpoint, &config.default_model)?)
+                    as Arc<dyn ModelAdapter>,
             )
         }
         "minimax" => {
@@ -206,16 +143,73 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Box<dyn ModelAdapter>> {
                 .endpoint
                 .clone()
                 .unwrap_or_else(|| "https://api.minimaxi.com/v1".to_string());
-            Ok(Box::new(super::MiniMaxAdapter::new(
+            Ok(Arc::new(super::MiniMaxAdapter::new(
+                &endpoint,
                 &api_key,
                 &config.default_model,
-                &endpoint,
                 config.thinking,
-            )?) as Box<dyn ModelAdapter>)
+            )?) as Arc<dyn ModelAdapter>)
         }
         _ => Err(crate::Error::Config(format!(
             "Unknown adapter type: {}",
             config.adapter_type
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dicts::DictEntry;
+    use crate::models::RawDataType;
+
+    #[test]
+    fn test_default_max_content_chars_is_2000() {
+        assert_eq!(DEFAULT_MAX_CONTENT_CHARS, 2000);
+    }
+
+    #[test]
+    fn test_raw_data_input_default_max_chars_is_none() {
+        let input = RawDataInput {
+            data_type: RawDataType::Text,
+            path: "test.md".to_string(),
+            metadata: Default::default(),
+            dict_set: None,
+            max_chars: None,
+        };
+        assert_eq!(input.max_chars, None);
+    }
+
+    #[test]
+    fn test_raw_data_input_with_custom_max_chars() {
+        let input = RawDataInput {
+            data_type: RawDataType::Text,
+            path: "test.md".to_string(),
+            metadata: Default::default(),
+            dict_set: None,
+            max_chars: Some(5000),
+        };
+        assert_eq!(input.max_chars, Some(5000));
+    }
+
+    #[test]
+    fn test_new_dict_entries_default_empty() {
+        let entries = NewDictEntries::default();
+        assert!(entries.event_types.is_empty());
+        assert!(entries.event_subtypes.is_empty());
+        assert!(entries.tags.is_empty());
+        assert!(entries.topics.is_empty());
+    }
+
+    #[test]
+    fn test_new_dict_entries_serialization() {
+        let mut entries = NewDictEntries::default();
+        entries
+            .tags
+            .push(DictEntry::new("new_tag").with_zh("新标签"));
+
+        let json = serde_json::to_string(&entries).unwrap();
+        assert!(json.contains("new_tag"));
+        assert!(json.contains("新标签"));
     }
 }
