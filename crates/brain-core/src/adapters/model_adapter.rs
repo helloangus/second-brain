@@ -5,6 +5,10 @@ use crate::error::Result;
 use crate::models::{RawDataType, TaskType};
 use serde::{Deserialize, Serialize};
 
+/// Default maximum content length for AI analysis (2000 characters).
+/// Content exceeding this limit will be truncated before sending to the model.
+pub const DEFAULT_MAX_CONTENT_CHARS: usize = 2000;
+
 /// Input for model analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawDataInput {
@@ -15,6 +19,10 @@ pub struct RawDataInput {
     /// Dictionary set for AI Step 2 alignment
     #[serde(default)]
     pub dict_set: Option<DictSet>,
+    /// Maximum content length for AI analysis (truncates if exceeded).
+    /// If None, uses DEFAULT_MAX_CONTENT_CHARS (2000).
+    #[serde(default)]
+    pub max_chars: Option<usize>,
 }
 
 /// New dictionary entries discovered during analysis
@@ -126,16 +134,6 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Arc<dyn ModelAdapter>> {
                     as Arc<dyn ModelAdapter>,
             )
         }
-        "openai" => {
-            let api_key = config
-                .api_key
-                .clone()
-                .ok_or_else(|| crate::Error::Config("OpenAI API key required".to_string()))?;
-            Ok(
-                Arc::new(super::OpenAIAdapter::new(&api_key, &config.default_model)?)
-                    as Arc<dyn ModelAdapter>,
-            )
-        }
         "minimax" => {
             let api_key = config
                 .api_key
@@ -146,9 +144,9 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Arc<dyn ModelAdapter>> {
                 .clone()
                 .unwrap_or_else(|| "https://api.minimaxi.com/v1".to_string());
             Ok(Arc::new(super::MiniMaxAdapter::new(
+                &endpoint,
                 &api_key,
                 &config.default_model,
-                &endpoint,
                 config.thinking,
             )?) as Arc<dyn ModelAdapter>)
         }
@@ -156,5 +154,62 @@ pub fn create_adapter(config: &AdapterConfig) -> Result<Arc<dyn ModelAdapter>> {
             "Unknown adapter type: {}",
             config.adapter_type
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dicts::DictEntry;
+    use crate::models::RawDataType;
+
+    #[test]
+    fn test_default_max_content_chars_is_2000() {
+        assert_eq!(DEFAULT_MAX_CONTENT_CHARS, 2000);
+    }
+
+    #[test]
+    fn test_raw_data_input_default_max_chars_is_none() {
+        let input = RawDataInput {
+            data_type: RawDataType::Text,
+            path: "test.md".to_string(),
+            metadata: Default::default(),
+            dict_set: None,
+            max_chars: None,
+        };
+        assert_eq!(input.max_chars, None);
+    }
+
+    #[test]
+    fn test_raw_data_input_with_custom_max_chars() {
+        let input = RawDataInput {
+            data_type: RawDataType::Text,
+            path: "test.md".to_string(),
+            metadata: Default::default(),
+            dict_set: None,
+            max_chars: Some(5000),
+        };
+        assert_eq!(input.max_chars, Some(5000));
+    }
+
+    #[test]
+    fn test_new_dict_entries_default_empty() {
+        let entries = NewDictEntries::default();
+        assert!(entries.event_types.is_empty());
+        assert!(entries.event_subtypes.is_empty());
+        assert!(entries.tags.is_empty());
+        assert!(entries.topics.is_empty());
+    }
+
+    #[test]
+    fn test_new_dict_entries_serialization() {
+        let mut entries = NewDictEntries::default();
+        entries
+            .tags
+            .push(DictEntry::new("new_tag").with_zh("新标签"));
+
+        let json = serde_json::to_string(&entries).unwrap();
+        assert!(json.contains("new_tag"));
+        assert!(json.contains("新标签"));
     }
 }

@@ -210,6 +210,7 @@ fn process_task_sync(
         path: input_path.to_string_lossy().to_string(),
         metadata: task.input.metadata.clone(),
         dict_set: Some(dicts.clone()),
+        max_chars: None,
     };
 
     // Analyze the data
