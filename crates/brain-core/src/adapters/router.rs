@@ -1,7 +1,7 @@
 //! Model registry for task-type-based routing
 
-use brain_core::adapters::{create_adapter, AdapterConfig, ModelAdapter};
-use brain_core::{BrainConfig, PipelineTask, TaskType};
+use crate::adapters::{create_adapter, AdapterConfig, ModelAdapter};
+use crate::{BrainConfig, PipelineTask, TaskType};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -18,7 +18,7 @@ pub struct ModelRegistry {
 }
 
 impl ModelRegistry {
-    pub fn new(config: &BrainConfig) -> brain_core::Result<Self> {
+    pub fn new(config: &BrainConfig) -> crate::Result<Self> {
         let mut entries: HashMap<TaskType, Vec<ModelEntry>> = HashMap::new();
 
         for adapter_config in &config.adapters {
@@ -27,8 +27,8 @@ impl ModelRegistry {
             // Health check - if fails, don't register this adapter
             if !adapter.health_check().unwrap_or(false) {
                 warn!(
-                    "Adapter {} ({}) not healthy, skipping",
-                    adapter_config.adapter_type, adapter_config.default_model
+                    "Adapter {} not healthy, skipping",
+                    adapter_config.adapter_type
                 );
                 continue;
             }

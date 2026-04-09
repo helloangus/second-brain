@@ -1,7 +1,7 @@
 //! Task processor
 
 use crate::builder::EventBuilder;
-use crate::router::ModelRegistry;
+use brain_core::adapters::ModelRegistry;
 use brain_core::{BrainConfig, DictSet, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;

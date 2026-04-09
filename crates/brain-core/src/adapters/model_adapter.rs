@@ -102,60 +102,13 @@ pub struct AdapterConfig {
     pub endpoint: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
-    #[serde(default = "default_model")]
+    #[serde(default)]
     pub default_model: String,
     #[serde(default)]
     pub timeout_secs: u64,
     /// Enable thinking mode for models that support it (MiniMax)
     #[serde(default)]
     pub thinking: bool,
-}
-
-fn default_model() -> String {
-    "llama3".to_string()
-}
-
-impl AdapterConfig {
-    /// Create an Ollama adapter config
-    pub fn ollama(endpoint: impl Into<String>, model: impl Into<String>) -> Self {
-        Self {
-            adapter_type: "ollama".to_string(),
-            endpoint: Some(endpoint.into()),
-            api_key: None,
-            default_model: model.into(),
-            timeout_secs: 60,
-            thinking: false,
-        }
-    }
-
-    /// Create an OpenAI adapter config
-    pub fn openai(api_key: impl Into<String>, model: impl Into<String>) -> Self {
-        Self {
-            adapter_type: "openai".to_string(),
-            endpoint: None,
-            api_key: Some(api_key.into()),
-            default_model: model.into(),
-            timeout_secs: 30,
-            thinking: false,
-        }
-    }
-
-    /// Create a MiniMax adapter config
-    pub fn minimax(
-        api_key: impl Into<String>,
-        model: impl Into<String>,
-        endpoint: impl Into<String>,
-        thinking: bool,
-    ) -> Self {
-        Self {
-            adapter_type: "minimax".to_string(),
-            endpoint: Some(endpoint.into()),
-            api_key: Some(api_key.into()),
-            default_model: model.into(),
-            timeout_secs: 60,
-            thinking,
-        }
-    }
 }
 
 use std::sync::Arc;
