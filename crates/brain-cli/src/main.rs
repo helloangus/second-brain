@@ -56,14 +56,17 @@ enum Commands {
         #[arg(short, long, default_value = "CLI")]
         source: String,
         /// Device type
-        #[arg(short, long, default_value = "PC")]
+        #[arg(short, long, default_value = "desktop")]
         device: String,
         /// Capture agent
-        #[arg(short, long, default_value = "manual_entry")]
+        #[arg(short, long, default_value = "manual")]
         agent: String,
         /// Data type (text, image, audio, video, document)
         #[arg(short, long, default_value = "text")]
         type_: String,
+        /// AI task type (summarize, image_caption, ocr, asr, face_detection, speaker_diarization, embedding, reasoning)
+        #[arg(long, default_value = "summarize")]
+        task_type: String,
         /// Process immediately with AI
         #[arg(short = 'p', long, default_value = "false")]
         process: bool,
@@ -167,10 +170,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             device,
             agent,
             type_,
+            task_type,
             process,
         } => {
-            commands::ingest::execute(&config, &file, &source, &device, &agent, &type_, process)
-                .await?;
+            commands::ingest::execute(
+                &config, &file, &source, &device, &agent, &type_, &task_type, process,
+            )
+            .await?;
         }
         Commands::Process { limit } => {
             commands::process::execute(&config, limit)?;

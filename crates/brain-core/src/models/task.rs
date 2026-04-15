@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Task type — what kind of AI processing to perform on the input data.
 ///
 /// Each variant maps to a specific AI capability:
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskType {
     /// Analyze image content and generate a natural language description.

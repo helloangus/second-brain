@@ -1,13 +1,10 @@
 //! Task processor
 
 use crate::builder::EventBuilder;
-use brain_core::adapters::{
-    create_adapter, AdapterConfig, DictContext, ModelAdapter, RawDataInput,
-};
+use brain_core::adapters::ModelRegistry;
 use brain_core::{BrainConfig, DictSet, PipelineOutput, PipelineTask};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tracing::{error, info, warn};
 
 /// A wrapper error that is Send + Sync
@@ -80,18 +77,11 @@ pub async fn process_queue(
 
     println!("正在处理 {} 个任务...", tasks.len());
 
-    // Get adapter configuration
-    let adapter_config =
-        config.adapters.first().cloned().unwrap_or_else(|| {
-            AdapterConfig::ollama("http://localhost:11434", "qwen3.5:9b-q4_K_M")
-        });
+    // Build model registry for task-type-based routing
+    let registry =
+        ModelRegistry::new(config).map_err(|e| PipelineError(format!("Registry error: {}", e)))?;
 
-    let adapter = Arc::new(
-        create_adapter(&adapter_config)
-            .map_err(|e| PipelineError(format!("Adapter error: {}", e)))?,
-    );
-
-    // Clone config for each task since we'll move it into closures
+    // Clone config once before loop - BrainConfig is not Sync so we can't share references
     let config_clone = config.clone();
 
     let mut processed = 0;
@@ -123,8 +113,17 @@ pub async fn process_queue(
             continue;
         }
 
-        // Clone Arc for this task
-        let adapter_clone = Arc::clone(&adapter);
+        // Select adapter based on task type
+        let (selected_adapter, _selected_config) = match registry.select(&task) {
+            Some((adapter, config)) => (adapter, config),
+            None => {
+                error!("No adapter found for task type: {}", task.task);
+                failed += 1;
+                continue;
+            }
+        };
+
+        // Clone config for this task - each spawn_blocking needs its own owned copy
         let config_for_task = config_clone.clone();
 
         // Time the task processing
@@ -133,7 +132,7 @@ pub async fn process_queue(
         // Process the task in a blocking thread to avoid tokio runtime conflicts
         // with the blocking HTTP client
         let task_result = tokio::task::spawn_blocking(move || {
-            process_task_sync(&task, adapter_clone.as_ref().as_ref(), &config_for_task)
+            process_task_sync(&task, selected_adapter.as_ref(), &config_for_task)
         })
         .await;
 
@@ -182,28 +181,17 @@ pub async fn process_queue(
     Ok(())
 }
 
-/// Load dictionary context for AI prompts
-fn load_dict_context(dicts_path: &std::path::Path) -> (DictContext, DictSet) {
-    match DictSet::load(dicts_path) {
-        Ok(dicts) => (
-            DictContext {
-                event_types: dicts.event_type.keys().into_iter().cloned().collect(),
-                event_subtypes: dicts.event_subtype.keys().into_iter().cloned().collect(),
-                tags: dicts.tags.keys().into_iter().cloned().collect(),
-                topics: dicts.topics.keys().into_iter().cloned().collect(),
-                dict_set: Some(dicts.clone()),
-            },
-            dicts,
-        ),
-        Err(_) => (DictContext::default(), DictSet::default_dicts()),
-    }
+/// Load dictionary set for AI prompts
+fn load_dict_context(dicts_path: &std::path::Path) -> DictSet {
+    DictSet::load(dicts_path).unwrap_or_else(|_| DictSet::default_dicts())
 }
 
 fn process_task_sync(
     task: &PipelineTask,
-    adapter: &dyn ModelAdapter,
+    adapter: &dyn brain_core::adapters::ModelAdapter,
     config: &BrainConfig,
 ) -> Result<(), PipelineError> {
+    use brain_core::adapters::RawDataInput;
     use std::path::Path;
 
     // Resolve the input path - if relative, prepend raw_data_path
@@ -214,14 +202,15 @@ fn process_task_sync(
     };
 
     // Load dictionaries for AI context (includes full DictSet for Step 2)
-    let (dict_context, dicts) = load_dict_context(&config.dicts_path);
+    let dicts = load_dict_context(&config.dicts_path);
 
     // Create input for the adapter
     let input = RawDataInput {
         data_type: task.data_type(),
         path: input_path.to_string_lossy().to_string(),
         metadata: task.input.metadata.clone(),
-        dict_context: Some(dict_context),
+        dict_set: Some(dicts.clone()),
+        max_chars: None,
     };
 
     // Analyze the data
@@ -231,77 +220,63 @@ fn process_task_sync(
     let analysis_result: Result<
         (brain_core::adapters::AnalysisOutputWithNewEntries, DictSet),
         PipelineError,
-    > = if adapter.supports(&task.data_type()) {
-        match adapter.analyze(&input) {
-            Ok(result) => {
-                let ai_elapsed = ai_start.elapsed();
-                let ai_duration_ms = ai_elapsed.as_millis() as u64;
+    > = match adapter.analyze(task.task.clone(), &input) {
+        Ok(result) => {
+            let ai_elapsed = ai_start.elapsed();
+            let ai_duration_ms = ai_elapsed.as_millis() as u64;
 
-                // Log AI processing
-                let logger = brain_core::Logger::new(config);
-                let data_type_str = match task.data_type() {
-                    brain_core::RawDataType::Image => "image",
-                    brain_core::RawDataType::Audio => "audio",
-                    brain_core::RawDataType::Video => "video",
-                    brain_core::RawDataType::Document => "document",
-                    _ => "text",
-                };
-                let _ = logger.log_ai_processing(
-                    &input_path.to_string_lossy(),
-                    data_type_str,
-                    adapter.name(),
-                    ai_duration_ms,
-                    true,
-                    file_size_bytes,
-                    None,
-                );
-                println!(
-                    "  AI分析: {:.2}秒 ({})",
-                    ai_elapsed.as_secs_f64(),
-                    data_type_str
-                );
+            // Log AI processing
+            let logger = brain_core::Logger::new(config);
+            let data_type_str = match task.data_type() {
+                brain_core::RawDataType::Image => "image",
+                brain_core::RawDataType::Audio => "audio",
+                brain_core::RawDataType::Video => "video",
+                brain_core::RawDataType::Document => "document",
+                _ => "text",
+            };
+            let _ = logger.log_ai_processing(
+                &input_path.to_string_lossy(),
+                data_type_str,
+                adapter.name(),
+                ai_duration_ms,
+                true,
+                file_size_bytes,
+                None,
+            );
+            println!(
+                "  AI分析: {:.2}秒 ({})",
+                ai_elapsed.as_secs_f64(),
+                data_type_str
+            );
 
-                // dicts may have been modified, pass it back
-                Ok((result, dicts))
-            }
-            Err(e) => {
-                let ai_elapsed = ai_start.elapsed();
-                let ai_duration_ms = ai_elapsed.as_millis() as u64;
-
-                // Log AI processing failure
-                let logger = brain_core::Logger::new(config);
-                let data_type_str = match task.data_type() {
-                    brain_core::RawDataType::Image => "image",
-                    brain_core::RawDataType::Audio => "audio",
-                    brain_core::RawDataType::Video => "video",
-                    brain_core::RawDataType::Document => "document",
-                    _ => "text",
-                };
-                let _ = logger.log_ai_processing(
-                    &input_path.to_string_lossy(),
-                    data_type_str,
-                    adapter.name(),
-                    ai_duration_ms,
-                    false,
-                    file_size_bytes,
-                    Some(&e.to_string()),
-                );
-
-                warn!("Analysis failed: {}", e);
-                Err(PipelineError(format!("Analysis error: {}", e)))
-            }
+            Ok((result, dicts))
         }
-    } else {
-        warn!(
-            "Adapter {} does not support {:?}",
-            adapter.name(),
-            task.data_type()
-        );
-        Err(PipelineError(format!(
-            "Adapter {} does not support {:?}",
-            adapter.name(),
-            task.data_type()
-        )))
+        Err(e) => {
+            let ai_elapsed = ai_start.elapsed();
+            let ai_duration_ms = ai_elapsed.as_millis() as u64;
+
+            // Log AI processing failure
+            let logger = brain_core::Logger::new(config);
+            let data_type_str = match task.data_type() {
+                brain_core::RawDataType::Image => "image",
+                brain_core::RawDataType::Audio => "audio",
+                brain_core::RawDataType::Video => "video",
+                brain_core::RawDataType::Document => "document",
+                _ => "text",
+            };
+            let _ = logger.log_ai_processing(
+                &input_path.to_string_lossy(),
+                data_type_str,
+                adapter.name(),
+                ai_duration_ms,
+                false,
+                file_size_bytes,
+                Some(&e.to_string()),
+            );
+
+            warn!("Analysis failed: {}", e);
+            Err(PipelineError(format!("Analysis error: {}", e)))
+        }
     };
 
     let (analysis_output, mut dicts) = match analysis_result {
